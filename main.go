@@ -129,6 +129,7 @@ func run(args []string) error {
 	off := fl.String("off", "dark", "unlit keys: dark, or layout (keep the layout's colours)")
 	reserve := fl.String("reserve", "", "comma-separated LEDs never to touch")
 	fps := fl.Int("fps", 30, "frames per second asked of cava")
+	smooth := fl.Int("smooth", 35, "cava smoothing, 0-100: lower is jumpier, higher is smoother")
 	idle := fl.Duration("idle", time.Second, "silence before the keys go back to the layout")
 	stdin := fl.Bool("stdin", false, "read frames (cava raw ascii, \"3;5;1;...\") from stdin instead of running cava")
 	verbose := fl.Bool("v", false, "print frames painted and LEDs sent on exit")
@@ -184,7 +185,7 @@ func run(args []string) error {
 		if *stdin {
 			srcErr <- source.Read(os.Stdin, frames)
 		} else {
-			srcErr <- source.Cava(ctx, grid.Columns(), grid.Height, *fps, frames)
+			srcErr <- source.Cava(ctx, grid.Columns(), grid.Height, *fps, *smooth, frames)
 		}
 	}()
 

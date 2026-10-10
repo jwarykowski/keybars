@@ -45,7 +45,8 @@ func Read(r io.Reader, frames chan<- []int) error {
 }
 
 // cavaConfig asks for one bar per grid column, scaled to the grid height,
-// as ascii lines on stdout.
+// as ascii lines on stdout. Mono runs bass to treble left to right; cava's
+// default stereo mirrors the channels with the bass in the middle.
 const cavaConfig = `[general]
 bars = %d
 framerate = %d
@@ -57,17 +58,23 @@ data_format = ascii
 ascii_max_range = %d
 bar_delimiter = 59
 frame_delimiter = 10
+channels = mono
+mono_option = average
+
+[smoothing]
+noise_reduction = %d
 `
 
 // Cava runs cava with a generated config for bars columns of up to height,
-// and streams its frames until ctx ends or cava exits.
-func Cava(ctx context.Context, bars, height, fps int, frames chan<- []int) error {
+// and streams its frames until ctx ends or cava exits. smooth is cava's
+// noise_reduction, 0-100: lower is jumpier, higher is slower and smoother.
+func Cava(ctx context.Context, bars, height, fps, smooth int, frames chan<- []int) error {
 	f, err := os.CreateTemp("", "keybars-cava-*.conf")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if _, err := fmt.Fprintf(f, cavaConfig, bars, fps, height); err != nil {
+	if _, err := fmt.Fprintf(f, cavaConfig, bars, fps, height, smooth); err != nil {
 		return err
 	}
 	if err := f.Close(); err != nil {

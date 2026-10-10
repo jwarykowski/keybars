@@ -2,7 +2,7 @@
 
 A music equaliser on a [ZSA](https://www.zsa.io) keyboard's backlight. Whatever
 the computer plays, each column of keys becomes a bar rising from the bottom
-row, green through to red.
+row, green through to red, bass on the left and treble on the right.
 
 - Talks to Keymapp's API over one connection and sends only the keys that
   changed, so it keeps up with the music: about 30 fps on a Moonlander.
@@ -39,6 +39,7 @@ keybars -height 5            # use the number row too
 keybars -off layout          # unlit keys keep the layout's colours
 keybars -colours '#0044ff,#aa00ff,#ff00aa'
 keybars -reserve 36,61       # never touch these LEDs
+keybars -smooth 15           # jumpier (0-100, default 35)
 ```
 
 Stop it with Ctrl-C. `-v` prints the frame rate on exit.
