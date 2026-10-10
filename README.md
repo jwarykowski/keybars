@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.svg" alt="keybars: music on your keyboard" width="640"></p>
+
 # keybars
 
 A music equaliser on a [ZSA](https://www.zsa.io) keyboard's backlight. Whatever
