@@ -1,4 +1,7 @@
-<p align="center"><img src="assets/logo.svg" alt="keybars: music on your keyboard" width="640"></p>
+<table>
+<tr>
+<td width="200" valign="top"><img src="assets/keybars.png" alt="keybars" width="180"></td>
+<td valign="top">
 
 # keybars
 
@@ -103,5 +106,9 @@ keybars is free and MIT licensed. If it makes your desk a bit more fun, you
 can [sponsor its development](https://github.com/sponsors/jwarykowski).
 
 ## License
+
+</td>
+</tr>
+</table>
 
 MIT
