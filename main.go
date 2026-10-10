@@ -1,14 +1,18 @@
 // keybars: a music equaliser on a ZSA keyboard's backlight. cava listens to
-// what the system plays; each of the 12 main columns becomes a bar rising
-// from the bottom row. Keys go back to the layout's colours when the music
-// stops and when keybars exits.
+// what the system plays; each column of keys becomes a bar rising from the
+// bottom row. Keys go back to the layout's colours when the music stops and
+// when keybars exits.
 package main
 
 import (
+	"bufio"
 	"context"
+	"embed"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/signal"
 	"slices"
@@ -24,30 +28,114 @@ import (
 	"github.com/jwarykowski/keybars/internal/source"
 )
 
+//go:embed maps/*.txt
+var embedded embed.FS
+
+// maps holds the built-in keyboard maps, maps/<model>.txt.
+var maps, _ = fs.Sub(embedded, "maps")
+
+const usage = `keybars: a music equaliser on a ZSA keyboard's backlight
+
+usage:
+  keybars [flags]         show the music playing as bars (needs cava)
+  keybars test [flags]    sweep the bars across the keyboard to check a map
+  keybars find [flags]    light LEDs one at a time to write a map
+  keybars maps            list the built-in maps and the connected keyboard
+
+Run a command with -h for its flags.
+`
+
 func main() {
-	if err := run(); err != nil {
+	cmd, args := "run", os.Args[1:]
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		cmd, args = args[0], args[1:]
+	}
+	var err error
+	switch cmd {
+	case "run":
+		err = run(args)
+	case "test":
+		err = test(args)
+	case "find":
+		err = find(args)
+	case "maps":
+		err = listMaps(args)
+	case "help":
+		fmt.Print(usage)
+	default:
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(2)
+	}
+	if err != nil && !errors.Is(err, flag.ErrHelp) {
 		fmt.Fprintln(os.Stderr, "keybars:", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	model := flag.String("model", "moonlander", "keyboard: "+strings.Join(layout.Models(), ", "))
-	height := flag.Int("height", 0, "bar height in rows from the bottom; 0 = all but the number row")
-	colours := flag.String("colours", "#00cc44,#88dd00,#ffcc00,#ff6600,#ff0000", "bar colours, bottom to top")
-	off := flag.String("off", "dark", "unlit keys: dark, or layout (keep the layout's colours)")
-	reserve := flag.String("reserve", "", "comma-separated LEDs never to touch")
-	fps := flag.Int("fps", 30, "frames per second asked of cava")
-	idle := flag.Duration("idle", time.Second, "silence before the keys go back to the layout")
-	stdin := flag.Bool("stdin", false, "read frames (cava raw ascii, \"3;5;1;...\") from stdin instead of running cava")
-	socket := flag.String("socket", "", "Keymapp socket (default: $KEYMAPP_SOCKET, else Keymapp's own)")
-	verbose := flag.Bool("v", false, "print frames painted and LEDs sent on exit")
-	flag.Parse()
+// common are the flags every command takes.
+type common struct {
+	model, mapFile, socket *string
+}
 
-	grid, err := layout.New(*model, *height)
-	if err != nil {
+func commonFlags(fl *flag.FlagSet) common {
+	return common{
+		model:   fl.String("model", "", "built-in map: "+strings.Join(layout.Builtin(maps), ", ")+" (default: detect the connected keyboard)"),
+		mapFile: fl.String("map", "", "map file to use instead of a built-in one"),
+		socket:  fl.String("socket", "", "Keymapp socket (default: $KEYMAPP_SOCKET, else Keymapp's own)"),
+	}
+}
+
+func connect(socket string) (*keymapp.Client, error) {
+	path := socket
+	if path == "" {
+		var err error
+		if path, err = keymapp.SocketPath(); err != nil {
+			return nil, err
+		}
+	}
+	return keymapp.Dial(path)
+}
+
+// loadMap reads -map, else the -model map, else the map matching the
+// keyboard Keymapp has connected.
+func loadMap(c common, client *keymapp.Client) (layout.Map, error) {
+	if *c.mapFile != "" {
+		f, err := os.Open(*c.mapFile)
+		if err != nil {
+			return layout.Map{}, err
+		}
+		defer f.Close()
+		return layout.Parse(*c.mapFile, f)
+	}
+	model := *c.model
+	if model == "" {
+		kb, err := client.Keyboard()
+		if err != nil {
+			return layout.Map{}, err
+		}
+		var ok bool
+		if model, ok = layout.Detect(maps, kb); !ok {
+			return layout.Map{}, fmt.Errorf("no built-in map for %q: write one with `keybars find` and pass -map FILE", kb)
+		}
+	}
+	return layout.Load(maps, model)
+}
+
+func run(args []string) error {
+	fl := flag.NewFlagSet("keybars", flag.ContinueOnError)
+	c := commonFlags(fl)
+	height := fl.Int("height", 0, "bar height in rows from the bottom; 0 = all but the top row")
+	colours := fl.String("colours", "#00cc44,#88dd00,#ffcc00,#ff6600,#ff0000", "bar colours, bottom to top")
+	off := fl.String("off", "dark", "unlit keys: dark, or layout (keep the layout's colours)")
+	reserve := fl.String("reserve", "", "comma-separated LEDs never to touch")
+	fps := fl.Int("fps", 30, "frames per second asked of cava")
+	idle := fl.Duration("idle", time.Second, "silence before the keys go back to the layout")
+	stdin := fl.Bool("stdin", false, "read frames (cava raw ascii, \"3;5;1;...\") from stdin instead of running cava")
+	verbose := fl.Bool("v", false, "print frames painted and LEDs sent on exit")
+	if err := fl.Parse(args); err != nil {
 		return err
 	}
+
 	cs, err := bars.ParseColours(*colours)
 	if err != nil {
 		return err
@@ -72,17 +160,19 @@ func run() error {
 		reserved = append(reserved, n)
 	}
 
-	path := *socket
-	if path == "" {
-		if path, err = keymapp.SocketPath(); err != nil {
-			return err
-		}
-	}
-	client, err := keymapp.Dial(path)
+	client, err := connect(*c.socket)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
+	m, err := loadMap(c, client)
+	if err != nil {
+		return err
+	}
+	grid, err := layout.New(m, *height)
+	if err != nil {
+		return err
+	}
 	r := bars.New(grid, client, cs, offMode, reserved)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -94,7 +184,7 @@ func run() error {
 		if *stdin {
 			srcErr <- source.Read(os.Stdin, frames)
 		} else {
-			srcErr <- source.Cava(ctx, grid.Height, *fps, frames)
+			srcErr <- source.Cava(ctx, grid.Columns(), grid.Height, *fps, frames)
 		}
 	}()
 
@@ -211,4 +301,149 @@ func latest(ctx context.Context, frames <-chan []int) func() ([]int, bool) {
 			}
 		}
 	}
+}
+
+// test sweeps a full bar across each column, then a level across every
+// column, bottom up, so a wrong map shows as a key out of line.
+func test(args []string) error {
+	fl := flag.NewFlagSet("keybars test", flag.ContinueOnError)
+	c := commonFlags(fl)
+	step := fl.Duration("step", 300*time.Millisecond, "time per step")
+	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	client, err := connect(*c.socket)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	m, err := loadMap(c, client)
+	if err != nil {
+		return err
+	}
+	grid, err := layout.New(m, m.Rows())
+	if err != nil {
+		return err
+	}
+	cs, _ := bars.ParseColours("#00cc44,#ffcc00,#ff0000")
+	r := bars.New(grid, client, cs, bars.Dark, nil)
+	defer r.Clear()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	show := func(heights []int) bool {
+		if _, err := r.Frame(heights); err != nil {
+			return false
+		}
+		select {
+		case <-time.After(*step):
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+	fmt.Printf("%s: %d columns x %d rows; columns left to right, then rows bottom up\n", m.Name, m.Columns(), m.Rows())
+	for x := 0; x < grid.Columns(); x++ {
+		h := make([]int, grid.Columns())
+		h[x] = grid.Height
+		if !show(h) {
+			return nil
+		}
+	}
+	for level := 1; level <= grid.Height; level++ {
+		h := make([]int, grid.Columns())
+		for x := range h {
+			h[x] = level
+		}
+		if !show(h) {
+			return nil
+		}
+	}
+	return nil
+}
+
+// find lights LEDs one at a time and prints each index, to draw a map from.
+func find(args []string) error {
+	fl := flag.NewFlagSet("keybars find", flag.ContinueOnError)
+	socket := fl.String("socket", "", "Keymapp socket (default: $KEYMAPP_SOCKET, else Keymapp's own)")
+	from := fl.Int("from", 0, "first LED")
+	to := fl.Int("to", 0, "last LED (default: until the keyboard has no more)")
+	auto := fl.Duration("auto", 0, "step on a timer instead of waiting for Enter")
+	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	client, err := connect(*socket)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	if kb, err := client.Keyboard(); err == nil {
+		fmt.Printf("%s: every key goes dark, then one lights at a time.\n", kb)
+	}
+	if *auto == 0 {
+		fmt.Println("Note the key under each LED number; Enter for the next, q to stop.")
+	}
+	white := keymapp.Colour{R: 255, G: 255, B: 255}
+	if err := client.SetAll(keymapp.Colour{}); err != nil {
+		return err
+	}
+	defer client.RestoreAll()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	in := bufio.NewReader(os.Stdin)
+	for led := *from; *to == 0 || led <= *to; led++ {
+		if err := client.Set(led, white); err != nil {
+			fmt.Printf("no LED %d: done\n", led)
+			return nil
+		}
+		fmt.Printf("LED %d ", led)
+		if *auto > 0 {
+			fmt.Println()
+			select {
+			case <-time.After(*auto):
+			case <-ctx.Done():
+				return nil
+			}
+		} else {
+			line, err := in.ReadString('\n')
+			if err != nil || strings.TrimSpace(line) == "q" {
+				return nil
+			}
+		}
+		if err := client.Set(led, keymapp.Colour{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func listMaps(args []string) error {
+	fl := flag.NewFlagSet("keybars maps", flag.ContinueOnError)
+	socket := fl.String("socket", "", "Keymapp socket (default: $KEYMAPP_SOCKET, else Keymapp's own)")
+	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	for _, n := range layout.Builtin(maps) {
+		m, err := layout.Load(maps, n)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%-12s %d columns x %d rows\n", n, m.Columns(), m.Rows())
+	}
+	client, err := connect(*socket)
+	if err != nil {
+		return nil // listing works without Keymapp
+	}
+	defer client.Close()
+	kb, err := client.Keyboard()
+	if err != nil {
+		return nil
+	}
+	if n, ok := layout.Detect(maps, kb); ok {
+		fmt.Printf("\nconnected: %s (uses %s)\n", kb, n)
+	} else {
+		fmt.Printf("\nconnected: %s (no built-in map; see keybars find)\n", kb)
+	}
+	return nil
 }

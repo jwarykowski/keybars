@@ -1,7 +1,7 @@
 // Package bars turns bar heights into LED colours and sends only what changed
-// since the last frame: at about a millisecond per LED, a full 60-LED repaint
-// would cap the frame rate near 15 fps, while a typical frame changes far
-// fewer keys.
+// since the last frame: at about a millisecond per LED, a full repaint of a
+// 60-key grid would cap the frame rate near 15 fps, while a typical frame
+// changes far fewer keys.
 package bars
 
 import (
@@ -53,10 +53,10 @@ func New(grid layout.Grid, leds keymapp.LEDs, colours []keymapp.Colour, off Off,
 // bar, 0..grid height); absent means the layout's colour.
 func (r *Renderer) Target(heights []int) map[int]keymapp.Colour {
 	t := map[int]keymapp.Colour{}
-	for x := 0; x < layout.Columns && x < len(heights); x++ {
+	for x := 0; x < r.grid.Columns() && x < len(heights); x++ {
 		for level := 0; level < r.grid.Height; level++ {
-			led := r.grid.LED(x, level)
-			if r.reserve[led] {
+			led, ok := r.grid.LED(x, level)
+			if !ok || r.reserve[led] {
 				continue
 			}
 			if heights[x] > level {

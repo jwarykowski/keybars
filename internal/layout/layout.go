@@ -1,79 +1,151 @@
-// Package layout maps a bar grid onto a keyboard's LED indices (ZSA's QMK
-// rgb_matrix order, the indices Keymapp's API takes).
+// Package layout reads keyboard maps: which LED (in Keymapp's index order)
+// sits under each key, drawn as a text grid.
 //
-// The grid is 12 columns, the six main columns of each half from left to
-// right, and up to five levels counted from the bottom row up. The inner
-// columns and thumb clusters are left out: they don't line up with the rest.
+//	# moonlander: rows top to bottom, one LED index per key
+//	 0  5 10 15 20 25 | 61 56 51 46 41 36
+//	 1  6 11 16 21 26 | 62 57 52 47 42 37
+//
+// Each line is a row of keys, top to bottom; numbers are LED indices, "-"
+// marks a gap, "|" is decoration (between halves, say), "#" starts a
+// comment. Columns become bars and rows become levels, so the grid can be
+// any size; rows may be ragged.
 package layout
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"io/fs"
+	"path"
 	"sort"
+	"strconv"
+	"strings"
 )
 
-// Columns is the number of bars: six main columns per half.
-const Columns = 12
-
-// Model is a keyboard: how a (column, physical row) pair maps to an LED,
-// and its physical rows from top (0, the number row) down.
-type Model struct {
-	Name string
-	Rows int
-	led  func(x, row int) int
+// Map is a parsed keyboard map.
+type Map struct {
+	Name  string
+	cells [][]int // [row][column], top row first; -1 = no key
 }
 
-var models = map[string]Model{
-	// left half numbered by column (5 LEDs each), right half mirrored from
-	// LED 36 with column 0 on the outside
-	"moonlander": {Name: "moonlander", Rows: 5, led: func(x, row int) int {
-		if x < 6 {
-			return x*5 + row
+// Parse reads a map; name labels errors and the map.
+func Parse(name string, r io.Reader) (Map, error) {
+	m := Map{Name: name}
+	cols := 0
+	sc := bufio.NewScanner(r)
+	for n := 1; sc.Scan(); n++ {
+		line, _, _ := strings.Cut(sc.Text(), "#")
+		var row []int
+		for _, f := range strings.Fields(line) {
+			switch f {
+			case "|":
+				continue
+			case "-":
+				row = append(row, -1)
+			default:
+				led, err := strconv.Atoi(f)
+				if err != nil || led < 0 {
+					return Map{}, fmt.Errorf("%s:%d: %q is not an LED index or -", name, n, f)
+				}
+				row = append(row, led)
+			}
 		}
-		return 36 + (11-x)*5 + row
-	}},
-	// numbered by row, 6 LEDs per row; the right half starts at LED 26
-	"voyager": {Name: "voyager", Rows: 4, led: func(x, row int) int {
-		if x < 6 {
-			return row*6 + x
+		if len(row) == 0 {
+			continue
 		}
-		return 26 + row*6 + (x - 6)
-	}},
+		cols = max(cols, len(row))
+		m.cells = append(m.cells, row)
+	}
+	if err := sc.Err(); err != nil {
+		return Map{}, err
+	}
+	if len(m.cells) == 0 {
+		return Map{}, fmt.Errorf("%s: no rows", name)
+	}
+	for i, row := range m.cells {
+		for len(row) < cols {
+			row = append(row, -1)
+		}
+		m.cells[i] = row
+	}
+	return m, nil
 }
 
-// Models lists the supported model names.
-func Models() []string {
-	names := make([]string, 0, len(models))
-	for n := range models {
-		names = append(names, n)
+// Rows is the number of rows of keys.
+func (m Map) Rows() int { return len(m.cells) }
+
+// Columns is the number of columns, the widest row.
+func (m Map) Columns() int { return len(m.cells[0]) }
+
+// LEDs lists every LED in the map.
+func (m Map) LEDs() []int {
+	var out []int
+	for _, row := range m.cells {
+		for _, led := range row {
+			if led >= 0 {
+				out = append(out, led)
+			}
+		}
+	}
+	return out
+}
+
+// Builtin lists the maps in fsys (files named <model>.txt).
+func Builtin(fsys fs.FS) []string {
+	names, _ := fs.Glob(fsys, "*.txt")
+	for i, n := range names {
+		names[i] = strings.TrimSuffix(n, ".txt")
 	}
 	sort.Strings(names)
 	return names
 }
 
-// Grid is the bar area: Height levels of Columns bars.
+// Load reads the built-in map for a model.
+func Load(fsys fs.FS, model string) (Map, error) {
+	f, err := fsys.Open(model + ".txt")
+	if err != nil {
+		return Map{}, fmt.Errorf("no map for %q (have %v; or pass -map FILE)", model, Builtin(fsys))
+	}
+	defer f.Close()
+	return Parse(model, f)
+}
+
+// Detect picks the built-in map whose name appears in the keyboard's name
+// as Keymapp reports it ("Moonlander MK1" -> moonlander).
+func Detect(fsys fs.FS, keyboard string) (string, bool) {
+	k := strings.ToLower(strings.ReplaceAll(keyboard, " ", ""))
+	for _, n := range Builtin(fsys) {
+		if strings.Contains(k, strings.ToLower(path.Base(n))) {
+			return n, true
+		}
+	}
+	return "", false
+}
+
+// Grid is the bar area: the bottom Height rows of a map.
 type Grid struct {
-	Model  Model
+	Map    Map
 	Height int
 }
 
-// New returns the grid for a model, height levels tall from the bottom row.
-// height 0 uses every row but the number row, which is left for other
-// lights (agent status, say).
-func New(model string, height int) (Grid, error) {
-	m, ok := models[model]
-	if !ok {
-		return Grid{}, fmt.Errorf("unknown model %q (have %v)", model, Models())
-	}
+// New returns the grid for a map, height rows tall from the bottom. height 0
+// uses every row but the top one, leaving the number row for other lights
+// (agent status, say).
+func New(m Map, height int) (Grid, error) {
 	if height == 0 {
-		height = m.Rows - 1
+		height = max(1, m.Rows()-1)
 	}
-	if height < 1 || height > m.Rows {
-		return Grid{}, fmt.Errorf("height %d: %s has %d rows", height, model, m.Rows)
+	if height < 1 || height > m.Rows() {
+		return Grid{}, fmt.Errorf("height %d: the %s map has %d rows", height, m.Name, m.Rows())
 	}
-	return Grid{Model: m, Height: height}, nil
+	return Grid{Map: m, Height: height}, nil
 }
 
-// LED is the index of bar x at level (0 = bottom row).
-func (g Grid) LED(x, level int) int {
-	return g.Model.led(x, g.Model.Rows-1-level)
+// Columns is the number of bars.
+func (g Grid) Columns() int { return g.Map.Columns() }
+
+// LED is the index under bar x at level (0 = bottom row), or false for a gap.
+func (g Grid) LED(x, level int) (int, bool) {
+	led := g.Map.cells[g.Map.Rows()-1-level][x]
+	return led, led >= 0
 }

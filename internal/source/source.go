@@ -12,8 +12,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-
-	"github.com/jwarykowski/keybars/internal/layout"
 )
 
 // Parse reads one line of cava raw ascii output: heights separated by ';'.
@@ -61,15 +59,15 @@ bar_delimiter = 59
 frame_delimiter = 10
 `
 
-// Cava runs cava with a generated config and streams its frames until ctx
-// ends or cava exits.
-func Cava(ctx context.Context, height, fps int, frames chan<- []int) error {
+// Cava runs cava with a generated config for bars columns of up to height,
+// and streams its frames until ctx ends or cava exits.
+func Cava(ctx context.Context, bars, height, fps int, frames chan<- []int) error {
 	f, err := os.CreateTemp("", "keybars-cava-*.conf")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if _, err := fmt.Fprintf(f, cavaConfig, layout.Columns, fps, height); err != nil {
+	if _, err := fmt.Fprintf(f, cavaConfig, bars, fps, height); err != nil {
 		return err
 	}
 	if err := f.Close(); err != nil {

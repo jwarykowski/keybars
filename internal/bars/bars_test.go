@@ -1,11 +1,18 @@
 package bars
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jwarykowski/keybars/internal/keymapp"
 	"github.com/jwarykowski/keybars/internal/layout"
 )
+
+// led is the LED under bar x at level in the test grid.
+func led(g layout.Grid, x, level int) int {
+	l, _ := g.LED(x, level)
+	return l
+}
 
 // fake records what a renderer sends.
 type fake struct {
@@ -24,9 +31,19 @@ var (
 	dark  = keymapp.Colour{}
 )
 
+// columns is the test grid's width: 12 bars, 2 rows.
+const columns = 12
+
 func setup(t *testing.T, off Off, reserve ...int) (*Renderer, *fake, layout.Grid) {
 	t.Helper()
-	g, err := layout.New("moonlander", 2)
+	m, err := layout.Parse("t", strings.NewReader(`
+ 0  1  2  3  4  5  6  7  8  9 10 11
+12 13 14 15 16 17 18 19 20 21 22 23
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := layout.New(m, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,26 +53,26 @@ func setup(t *testing.T, off Off, reserve ...int) (*Renderer, *fake, layout.Grid
 
 func TestFrameColoursByLevel(t *testing.T) {
 	r, f, g := setup(t, Dark)
-	heights := make([]int, layout.Columns)
+	heights := make([]int, columns)
 	heights[0] = 2
 	heights[1] = 1
 	if _, err := r.Frame(heights); err != nil {
 		t.Fatal(err)
 	}
-	if f.set[g.LED(0, 0)] != green || f.set[g.LED(0, 1)] != red {
-		t.Errorf("bar 0: want green below red, got %v %v", f.set[g.LED(0, 0)], f.set[g.LED(0, 1)])
+	if f.set[led(g, 0, 0)] != green || f.set[led(g, 0, 1)] != red {
+		t.Errorf("bar 0: want green below red, got %v %v", f.set[led(g, 0, 0)], f.set[led(g, 0, 1)])
 	}
-	if f.set[g.LED(1, 0)] != green || f.set[g.LED(1, 1)] != dark {
-		t.Errorf("bar 1: want green then dark, got %v %v", f.set[g.LED(1, 0)], f.set[g.LED(1, 1)])
+	if f.set[led(g, 1, 0)] != green || f.set[led(g, 1, 1)] != dark {
+		t.Errorf("bar 1: want green then dark, got %v %v", f.set[led(g, 1, 0)], f.set[led(g, 1, 1)])
 	}
-	if len(f.set) != layout.Columns*2 {
-		t.Errorf("first frame set %d LEDs, want the whole %d-LED grid", len(f.set), layout.Columns*2)
+	if len(f.set) != columns*2 {
+		t.Errorf("first frame set %d LEDs, want the whole %d-LED grid", len(f.set), columns*2)
 	}
 }
 
 func TestFrameSendsOnlyChanges(t *testing.T) {
 	r, f, _ := setup(t, Dark)
-	heights := make([]int, layout.Columns)
+	heights := make([]int, columns)
 	r.Frame(heights)
 	heights[3] = 1
 	n, err := r.Frame(heights)
@@ -70,7 +87,7 @@ func TestFrameSendsOnlyChanges(t *testing.T) {
 
 func TestLayoutOffRestoresKeys(t *testing.T) {
 	r, f, g := setup(t, Layout)
-	heights := make([]int, layout.Columns)
+	heights := make([]int, columns)
 	heights[5] = 1
 	r.Frame(heights)
 	if len(f.set) != 1 {
@@ -78,16 +95,16 @@ func TestLayoutOffRestoresKeys(t *testing.T) {
 	}
 	heights[5] = 0
 	r.Frame(heights)
-	if len(f.restored) != 1 || f.restored[0] != g.LED(5, 0) {
-		t.Errorf("restored %v, want [%d]", f.restored, g.LED(5, 0))
+	if len(f.restored) != 1 || f.restored[0] != led(g, 5, 0) {
+		t.Errorf("restored %v, want [%d]", f.restored, led(g, 5, 0))
 	}
 }
 
 func TestReserveIsNeverTouched(t *testing.T) {
 	_, _, g := setup(t, Dark)
-	keep := g.LED(2, 0)
+	keep := led(g, 2, 0)
 	r, f, _ := setup(t, Dark, keep)
-	heights := make([]int, layout.Columns)
+	heights := make([]int, columns)
 	heights[2] = 2
 	r.Frame(heights)
 	if _, ok := f.set[keep]; ok {

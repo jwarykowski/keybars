@@ -1,43 +1,99 @@
 package layout
 
-import "testing"
+import (
+	"os"
+	"slices"
+	"strings"
+	"testing"
+)
 
-func TestLED(t *testing.T) {
+// the repo's built-in maps
+var builtin = os.DirFS("../../maps")
+
+func TestParse(t *testing.T) {
+	m, err := Parse("t", strings.NewReader(`
+# a comment
+ 1  2 | 3   # trailing comment
+ 4  - | 5  6
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Rows() != 2 || m.Columns() != 4 {
+		t.Fatalf("got %dx%d, want 2 rows x 4 columns (the widest row)", m.Rows(), m.Columns())
+	}
+	g, _ := New(m, 2)
+	if led, ok := g.LED(0, 0); !ok || led != 4 {
+		t.Errorf("bottom-left = %d %v, want 4", led, ok)
+	}
+	if _, ok := g.LED(1, 0); ok {
+		t.Error("- should be a gap")
+	}
+	if _, ok := g.LED(3, 1); ok {
+		t.Error("a short row should be padded with gaps")
+	}
+	if !slices.Equal(m.LEDs(), []int{1, 2, 3, 4, 5, 6}) {
+		t.Errorf("LEDs = %v", m.LEDs())
+	}
+}
+
+func TestParseErrors(t *testing.T) {
+	for _, in := range []string{"", "# only a comment\n", "1 x 3\n", "1 -2\n"} {
+		if _, err := Parse("t", strings.NewReader(in)); err == nil {
+			t.Errorf("Parse(%q): want an error", in)
+		}
+	}
+}
+
+func TestBuiltinMaps(t *testing.T) {
+	if got := Builtin(builtin); !slices.Equal(got, []string{"moonlander", "voyager"}) {
+		t.Fatalf("Builtin = %v", got)
+	}
 	for _, tc := range []struct {
 		model    string
 		x, level int
 		want     int
 	}{
-		// Q and P sit on the second row: level 3 of the moonlander's 5 rows
+		// the indices herdr-zsa-lights uses: Q and P on the second row
 		{"moonlander", 1, 3, 6},
 		{"moonlander", 10, 3, 42},
-		{"moonlander", 0, 0, 4},   // bottom-left
-		{"moonlander", 11, 0, 40}, // bottom-right
 		{"moonlander", 6, 4, 61},  // the 6 key
-		{"voyager", 1, 2, 7},      // Q
-		{"voyager", 6, 2, 32},     // Y
-		{"voyager", 11, 0, 49},    // bottom-right
+		{"moonlander", 11, 4, 36}, // top-right
+		{"moonlander", 0, 0, 4},
+		{"voyager", 1, 2, 7},  // Q
+		{"voyager", 6, 2, 32}, // Y
+		{"voyager", 11, 3, 31},
 	} {
-		g, err := New(tc.model, 0)
+		m, err := Load(builtin, tc.model)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Height = g.Model.Rows
-		if got := g.LED(tc.x, tc.level); got != tc.want {
+		g, _ := New(m, m.Rows())
+		if got, _ := g.LED(tc.x, tc.level); got != tc.want {
 			t.Errorf("%s LED(%d, %d) = %d, want %d", tc.model, tc.x, tc.level, got, tc.want)
 		}
 	}
 }
 
 func TestNew(t *testing.T) {
-	g, err := New("moonlander", 0)
+	m, _ := Load(builtin, "moonlander")
+	g, err := New(m, 0)
 	if err != nil || g.Height != 4 {
 		t.Fatalf("default height = %d, %v; want 4 (all but the number row)", g.Height, err)
 	}
-	if _, err := New("voyager", 5); err == nil {
-		t.Error("voyager height 5: want an error, it has 4 rows")
+	if _, err := New(m, 6); err == nil {
+		t.Error("height 6 on a 5-row map: want an error")
 	}
-	if _, err := New("planck", 0); err == nil {
+	if _, err := Load(builtin, "planck"); err == nil {
 		t.Error("unknown model: want an error")
+	}
+}
+
+func TestDetect(t *testing.T) {
+	for kb, want := range map[string]string{"Moonlander MK1": "moonlander", "Voyager": "voyager", "ErgoDox EZ": ""} {
+		got, ok := Detect(builtin, kb)
+		if got != want || ok != (want != "") {
+			t.Errorf("Detect(%q) = %q %v, want %q", kb, got, ok, want)
+		}
 	}
 }
