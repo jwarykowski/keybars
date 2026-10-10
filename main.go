@@ -1,4 +1,4 @@
-// keybars: a music equaliser on a ZSA keyboard's backlight. cava listens to
+// keybars: a music equaliser on a keyboard's backlight. cava listens to
 // what the system plays; each column of keys becomes a bar rising from the
 // bottom row. Keys go back to the layout's colours when the music stops and
 // when keybars exits.
@@ -34,7 +34,7 @@ var embedded embed.FS
 // maps holds the built-in keyboard maps, maps/<model>.txt.
 var maps, _ = fs.Sub(embedded, "maps")
 
-const usage = `keybars: a music equaliser on a ZSA keyboard's backlight
+const usage = `keybars: a music equaliser on your keyboard's backlight
 
 usage:
   keybars [flags]         show the music playing as bars (needs cava)

@@ -2,26 +2,29 @@
 
 # keybars
 
-A music equaliser on a [ZSA](https://www.zsa.io) keyboard's backlight. Whatever
-the computer plays, each column of keys becomes a bar rising from the bottom
+A music equaliser on your keyboard's backlight. Whatever the computer plays, each column of keys becomes a bar rising from the bottom
 row, bass on the left and treble on the right, with a white peak dot that
 holds a moment and falls like a hi-fi meter.
 
-- Talks to Keymapp's API over one connection and sends only the keys that
-  changed, so it keeps up with the music: about 30 fps on a Moonlander.
+- Sends only the keys that changed, so it keeps up with the music: about
+  30 fps on a Moonlander.
+- Drives keyboards through a small backend interface; today that is ZSA's
+  Keymapp (Moonlander, Voyager), and other per-key RGB keyboards need only
+  a backend and a map.
 - Finds the connected keyboard on its own; any other board needs only a text
   map, which `keybars find` helps you write.
 - When the music stops, the keys go back to your layout's colours; the same
-  when keybars exits. While it plays, keys outside the bars are dark: once
-  Keymapp drives any key, the firmware shows only what the API sets.
+  when keybars exits. (On ZSA boards, keys outside the bars are dark while it
+  plays: once Keymapp drives any key, the firmware shows only what it sets.)
 - The number row is left alone by default, free for other lights such as
   [herdr-zsa-lights](https://github.com/jwarykowski/herdr-zsa-lights)' agent
   status.
 
 ## Requirements
 
-- A Moonlander or Voyager, and [Keymapp](https://www.zsa.io/flash) running
-  with its **API enabled**
+- A keyboard with a backend. Supported today: ZSA Moonlander and Voyager
+  through [Keymapp](https://www.zsa.io/flash), running with its **API
+  enabled**
 - [cava](https://github.com/karlstav/cava) to listen to the audio
   (`dnf install cava`, `apt install cava`, `brew install cava`; macOS also
   needs a loopback device such as [BlackHole](https://github.com/ExistentialAudio/BlackHole))
