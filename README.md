@@ -53,28 +53,29 @@ printf '1;2;3;4;3;2;1;0;1;2;3;4;\n' | keybars -stdin
 
 ## Keyboard maps
 
-A map is the LED index under each key, drawn as the keyboard looks: one line
-per row of keys, top to bottom. Columns become bars and rows become levels,
-so any size works. `-` marks a gap, `|` is decoration, `#` starts a comment.
+A map is Keymapp's index for each key, drawn as the keyboard looks: one line
+per row of keys, top to bottom. Keymapp numbers each half on its own, row by
+row from the left, inner column included (not the firmware's LED order).
+Columns become bars and rows become levels, so any size works. `-` marks a gap, `|` is decoration, `#` starts a comment.
 [`maps/moonlander.txt`](maps/moonlander.txt):
 
 ```
- 0  5 10 15 20 25 | 61 56 51 46 41 36
- 1  6 11 16 21 26 | 62 57 52 47 42 37
- 2  7 12 17 22 27 | 63 58 53 48 43 38
- 3  8 13 18 23 28 | 64 59 54 49 44 39
- 4  9 14 19 24 29 | 65 60 55 50 45 40
+ -  1  2  3  4  5 | 37 38 39 40 41 42
+ 7  8  9 10 11 12 | 44 45 46 47 48 49
+14 15 16 17 18 19 | 51 52 53 54 55 56
+21 22 23 24 25 26 | 57 58 59 60 61 62
+27 28 29 30 31  - |  - 63 64 65 66 67
 ```
 
 `keybars maps` lists the built-in maps and which one the connected keyboard
-uses (matched on the name Keymapp reports). The Moonlander map is tested; the
-Voyager map is derived from ZSA's layout and untested, so corrections are
-welcome.
+uses (matched on the name Keymapp reports). The Moonlander map is tested on
+a real board; the Voyager map follows the same numbering but is untested, so
+corrections are welcome.
 
 ### Adding a keyboard
 
-1. `keybars find` darkens the board and lights one LED at a time, printing
-   its index; press Enter for the next. Write each index where its key sits.
+1. `keybars find` darkens the board and lights one key at a time, printing
+   its index (Keymapp never lights index 0, so start from 1); press Enter for the next. Write each index where its key sits.
 2. `keybars test -map my-board.txt` sweeps a bar across each column, then a
    level across each row: a key out of line is a wrong index.
 3. Use it with `-map my-board.txt`, or open a pull request adding it to

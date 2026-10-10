@@ -131,7 +131,12 @@ func run(args []string) error {
 	fps := fl.Int("fps", 30, "frames per second asked of cava")
 	smooth := fl.Int("smooth", 35, "cava smoothing, 0-100: lower is jumpier, higher is smoother")
 	idle := fl.Duration("idle", time.Second, "silence before the keys go back to the layout")
+	refresh := fl.Duration("refresh", 2*time.Second, "resend every key this often, in case something reset the board")
 	stdin := fl.Bool("stdin", false, "read frames (cava raw ascii, \"3;5;1;...\") from stdin instead of running cava")
+	peaks := fl.Bool("peaks", false, "falling peak dots above the bars")
+	peakColour := fl.String("peak-colour", "#ffffff", "peak dot colour")
+	peakHold := fl.Duration("peak-hold", 400*time.Millisecond, "how long a peak dot holds before falling")
+	peakFall := fl.Float64("peak-fall", 6, "how fast peak dots fall, in rows per second")
 	verbose := fl.Bool("v", false, "print frames painted and LEDs sent on exit")
 	if err := fl.Parse(args); err != nil {
 		return err
@@ -175,6 +180,15 @@ func run(args []string) error {
 		return err
 	}
 	r := bars.New(grid, client, cs, offMode, reserved)
+	var pk *bars.Peaks
+	if *peaks {
+		pc, err := bars.ParseColours(*peakColour)
+		if err != nil {
+			return fmt.Errorf("-peak-colour: %w", err)
+		}
+		r.WithPeaks(pc[0])
+		pk = bars.NewPeaks(*peakHold, *peakFall)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -191,7 +205,7 @@ func run(args []string) error {
 
 	var st stats
 	start := time.Now()
-	err = paint(ctx, r, latest(ctx, frames), *idle, &st)
+	err = paint(ctx, r, pk, latest(ctx, frames), *idle, *refresh, &st)
 	if *verbose {
 		secs := time.Since(start).Seconds()
 		fmt.Fprintf(os.Stderr, "keybars: %d frames in %.1fs (%.1f fps), %d LEDs sent (%.1f per frame)\n",
@@ -216,9 +230,11 @@ func run(args []string) error {
 type stats struct{ frames, leds int }
 
 // paint draws the newest frame whenever one arrives, until the source ends or
-// ctx is done. After idle of silence it hands the keys back to the layout.
-func paint(ctx context.Context, r *bars.Renderer, next func() ([]int, bool), idle time.Duration, st *stats) error {
+// ctx is done, with peak dots when pk isn't nil. After idle of silence it
+// hands the keys back to the layout; every refresh it resends every key.
+func paint(ctx context.Context, r *bars.Renderer, pk *bars.Peaks, next func() ([]int, bool), idle, refresh time.Duration, st *stats) error {
 	var quietSince time.Time
+	lastFull := time.Now()
 	cleared := true
 	for ctx.Err() == nil {
 		f, ok := next()
@@ -242,7 +258,15 @@ func paint(ctx context.Context, r *bars.Renderer, next func() ([]int, bool), idl
 			quietSince = time.Time{}
 		}
 		cleared = false
-		n, err := r.Frame(f)
+		if refresh > 0 && time.Since(lastFull) >= refresh {
+			r.Invalidate()
+			lastFull = time.Now()
+		}
+		var peaks []int
+		if pk != nil {
+			peaks = pk.Update(f, time.Now())
+		}
+		n, err := r.Frame(f, peaks)
 		if err != nil {
 			return err
 		}
@@ -333,7 +357,7 @@ func test(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	show := func(heights []int) bool {
-		if _, err := r.Frame(heights); err != nil {
+		if _, err := r.Frame(heights, nil); err != nil {
 			return false
 		}
 		select {
@@ -367,8 +391,8 @@ func test(args []string) error {
 func find(args []string) error {
 	fl := flag.NewFlagSet("keybars find", flag.ContinueOnError)
 	socket := fl.String("socket", "", "Keymapp socket (default: $KEYMAPP_SOCKET, else Keymapp's own)")
-	from := fl.Int("from", 0, "first LED")
-	to := fl.Int("to", 0, "last LED (default: until the keyboard has no more)")
+	from := fl.Int("from", 1, "first key index (Keymapp never lights 0)")
+	to := fl.Int("to", 0, "last key index (default: until the keyboard has no more)")
 	auto := fl.Duration("auto", 0, "step on a timer instead of waiting for Enter")
 	if err := fl.Parse(args); err != nil {
 		return err

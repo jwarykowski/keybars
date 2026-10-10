@@ -1,11 +1,12 @@
-// Package layout reads keyboard maps: which LED (in Keymapp's index order)
-// sits under each key, drawn as a text grid.
+// Package layout reads keyboard maps: Keymapp's index for each key, drawn as
+// a text grid. Keymapp numbers each half on its own, row by row, not in the
+// firmware's LED order.
 //
-//	# moonlander: rows top to bottom, one LED index per key
-//	 0  5 10 15 20 25 | 61 56 51 46 41 36
-//	 1  6 11 16 21 26 | 62 57 52 47 42 37
+//	# moonlander: rows top to bottom, one index per key
+//	 0  1  2  3  4  5 | 37 38 39 40 41 42
+//	 7  8  9 10 11 12 | 44 45 46 47 48 49
 //
-// Each line is a row of keys, top to bottom; numbers are LED indices, "-"
+// Each line is a row of keys, top to bottom; numbers are key indices, "-"
 // marks a gap, "|" is decoration (between halves, say), "#" starts a
 // comment. Columns become bars and rows become levels, so the grid can be
 // any size; rows may be ragged.

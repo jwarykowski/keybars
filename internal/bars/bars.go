@@ -30,6 +30,13 @@ type Renderer struct {
 	off     Off
 	reserve map[int]bool
 	shown   map[int]keymapp.Colour // what each LED shows now; absent = layout
+	peak    *keymapp.Colour        // peak dot colour; nil = no dots
+}
+
+// WithPeaks draws a dot of colour c at each bar's peak level (see Peaks).
+func (r *Renderer) WithPeaks(c keymapp.Colour) *Renderer {
+	r.peak = &c
+	return r
 }
 
 // New returns a renderer. colours run bottom to top and are stretched over
@@ -50,8 +57,9 @@ func New(grid layout.Grid, leds keymapp.LEDs, colours []keymapp.Colour, off Off,
 }
 
 // Target is what every LED in the grid should show for heights (one per
-// bar, 0..grid height); absent means the layout's colour.
-func (r *Renderer) Target(heights []int) map[int]keymapp.Colour {
+// bar, 0..grid height) and peaks (nil without dots); absent means the
+// layout's colour.
+func (r *Renderer) Target(heights, peaks []int) map[int]keymapp.Colour {
 	t := map[int]keymapp.Colour{}
 	for x := 0; x < r.grid.Columns() && x < len(heights); x++ {
 		for level := 0; level < r.grid.Height; level++ {
@@ -59,9 +67,12 @@ func (r *Renderer) Target(heights []int) map[int]keymapp.Colour {
 			if !ok || r.reserve[led] {
 				continue
 			}
-			if heights[x] > level {
+			switch {
+			case heights[x] > level:
 				t[led] = r.colours[level]
-			} else if r.off == Dark {
+			case r.peak != nil && x < len(peaks) && peaks[x] == level+1:
+				t[led] = *r.peak
+			case r.off == Dark:
 				t[led] = keymapp.Colour{}
 			}
 		}
@@ -69,10 +80,10 @@ func (r *Renderer) Target(heights []int) map[int]keymapp.Colour {
 	return t
 }
 
-// Frame paints heights, sending only the LEDs that changed. It returns how
-// many it sent.
-func (r *Renderer) Frame(heights []int) (int, error) {
-	target := r.Target(heights)
+// Frame paints heights and peak dots (nil for none), sending only the LEDs
+// that changed. It returns how many it sent.
+func (r *Renderer) Frame(heights, peaks []int) (int, error) {
+	target := r.Target(heights, peaks)
 	sent := 0
 	for led, c := range target {
 		if old, ok := r.shown[led]; ok && old == c {
@@ -94,6 +105,13 @@ func (r *Renderer) Frame(heights []int) (int, error) {
 		}
 	}
 	return sent, nil
+}
+
+// Invalidate forgets what the keyboard shows, so the next frame resends
+// every LED: Keymapp drops API colours when anything restores the layout
+// (another tool, a kontroll --sustain timer), and nothing tells us.
+func (r *Renderer) Invalidate() {
+	r.shown = map[int]keymapp.Colour{}
 }
 
 // Clear hands the board back to the layout.

@@ -54,14 +54,14 @@ func TestBuiltinMaps(t *testing.T) {
 		x, level int
 		want     int
 	}{
-		// the indices herdr-zsa-lights uses: Q and P on the second row
-		{"moonlander", 1, 3, 6},
-		{"moonlander", 10, 3, 42},
-		{"moonlander", 6, 4, 61},  // the 6 key
-		{"moonlander", 11, 4, 36}, // top-right
-		{"moonlander", 0, 0, 4},
-		{"voyager", 1, 2, 7},  // Q
-		{"voyager", 6, 2, 32}, // Y
+		// Q and P on the second row, in Keymapp's key order
+		{"moonlander", 1, 3, 8},
+		{"moonlander", 10, 3, 48},
+		{"moonlander", 6, 4, 37},  // the 6 key
+		{"moonlander", 11, 4, 42}, // top-right, as photographed
+		{"moonlander", 11, 0, 67}, // bottom-right, as photographed
+		{"voyager", 1, 2, 7},      // Q
+		{"voyager", 6, 2, 32},     // Y
 		{"voyager", 11, 3, 31},
 	} {
 		m, err := Load(builtin, tc.model)

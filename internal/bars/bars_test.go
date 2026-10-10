@@ -56,7 +56,7 @@ func TestFrameColoursByLevel(t *testing.T) {
 	heights := make([]int, columns)
 	heights[0] = 2
 	heights[1] = 1
-	if _, err := r.Frame(heights); err != nil {
+	if _, err := r.Frame(heights, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f.set[led(g, 0, 0)] != green || f.set[led(g, 0, 1)] != red {
@@ -73,13 +73,13 @@ func TestFrameColoursByLevel(t *testing.T) {
 func TestFrameSendsOnlyChanges(t *testing.T) {
 	r, f, _ := setup(t, Dark)
 	heights := make([]int, columns)
-	r.Frame(heights)
+	r.Frame(heights, nil)
 	heights[3] = 1
-	n, err := r.Frame(heights)
+	n, err := r.Frame(heights, nil)
 	if err != nil || n != 1 {
 		t.Fatalf("one bar up one level sent %d LEDs (%v), want 1", n, err)
 	}
-	if n, _ := r.Frame(heights); n != 0 {
+	if n, _ := r.Frame(heights, nil); n != 0 {
 		t.Errorf("same frame again sent %d, want 0", n)
 	}
 	_ = f
@@ -89,12 +89,12 @@ func TestLayoutOffRestoresKeys(t *testing.T) {
 	r, f, g := setup(t, Layout)
 	heights := make([]int, columns)
 	heights[5] = 1
-	r.Frame(heights)
+	r.Frame(heights, nil)
 	if len(f.set) != 1 {
 		t.Fatalf("set %d LEDs, want only the lit one", len(f.set))
 	}
 	heights[5] = 0
-	r.Frame(heights)
+	r.Frame(heights, nil)
 	if len(f.restored) != 1 || f.restored[0] != led(g, 5, 0) {
 		t.Errorf("restored %v, want [%d]", f.restored, led(g, 5, 0))
 	}
@@ -106,7 +106,7 @@ func TestReserveIsNeverTouched(t *testing.T) {
 	r, f, _ := setup(t, Dark, keep)
 	heights := make([]int, columns)
 	heights[2] = 2
-	r.Frame(heights)
+	r.Frame(heights, nil)
 	if _, ok := f.set[keep]; ok {
 		t.Errorf("reserved LED %d was set", keep)
 	}
@@ -120,4 +120,32 @@ func TestParseColours(t *testing.T) {
 	if _, err := ParseColours("#fff"); err == nil {
 		t.Error("short colour: want an error")
 	}
+}
+
+func TestPeakDot(t *testing.T) {
+	r, f, g := setup(t, Dark)
+	r.WithPeaks(keymapp.Colour{B: 255})
+	heights := make([]int, columns)
+	peaks := make([]int, columns)
+	peaks[4] = 2 // bar 4 empty, its peak on the top level
+	r.Frame(heights, peaks)
+	if f.set[led(g, 4, 1)] != (keymapp.Colour{B: 255}) || f.set[led(g, 4, 0)] != dark {
+		t.Errorf("want a dot on top and dark below, got %v %v", f.set[led(g, 4, 1)], f.set[led(g, 4, 0)])
+	}
+	heights[4] = 2 // the bar covers its peak: bar colours win
+	r.Frame(heights, peaks)
+	if f.set[led(g, 4, 1)] != red {
+		t.Errorf("bar over its peak: want red, got %v", f.set[led(g, 4, 1)])
+	}
+}
+
+func TestInvalidateResends(t *testing.T) {
+	r, f, _ := setup(t, Dark)
+	heights := make([]int, columns)
+	r.Frame(heights, nil)
+	r.Invalidate()
+	if n, _ := r.Frame(heights, nil); n != columns*2 {
+		t.Errorf("after Invalidate sent %d, want the whole %d-LED grid", n, columns*2)
+	}
+	_ = f
 }
