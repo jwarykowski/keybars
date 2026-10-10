@@ -2,14 +2,16 @@
 
 A music equaliser on a [ZSA](https://www.zsa.io) keyboard's backlight. Whatever
 the computer plays, each column of keys becomes a bar rising from the bottom
-row, green through to red, bass on the left and treble on the right.
+row, bass on the left and treble on the right, with a white peak dot that
+holds a moment and falls like a hi-fi meter.
 
 - Talks to Keymapp's API over one connection and sends only the keys that
   changed, so it keeps up with the music: about 30 fps on a Moonlander.
 - Finds the connected keyboard on its own; any other board needs only a text
   map, which `keybars find` helps you write.
 - When the music stops, the keys go back to your layout's colours; the same
-  when keybars exits.
+  when keybars exits. While it plays, keys outside the bars are dark: once
+  Keymapp drives any key, the firmware shows only what the API sets.
 - The number row is left alone by default, free for other lights such as
   [herdr-zsa-lights](https://github.com/jwarykowski/herdr-zsa-lights)' agent
   status.
@@ -36,8 +38,9 @@ keybars                      # the connected keyboard, bars 4 rows high
 keybars -model voyager       # pick a built-in map
 keybars -map my-board.txt    # or your own
 keybars -height 5            # use the number row too
-keybars -off layout          # unlit keys keep the layout's colours
-keybars -colours '#0044ff,#aa00ff,#ff00aa'
+keybars -colours '#00ff00,#ffff00,#ff0000'   # meter colours, bottom to top
+keybars -gain 2              # reach the top more often (default 1.5)
+keybars -peaks=false         # no peak dots
 keybars -reserve 36,61       # never touch these LEDs
 keybars -smooth 15           # jumpier (0-100, default 35)
 ```

@@ -12,22 +12,11 @@ import (
 	"github.com/jwarykowski/keybars/internal/layout"
 )
 
-// Off is what an unlit key shows.
-type Off int
-
-const (
-	// Dark turns unlit keys off, the classic equaliser look.
-	Dark Off = iota
-	// Layout leaves unlit keys in the layout's own colours.
-	Layout
-)
-
 // Renderer paints frames onto a keyboard.
 type Renderer struct {
 	grid    layout.Grid
 	leds    keymapp.LEDs
 	colours []keymapp.Colour // one per level, bottom first
-	off     Off
 	reserve map[int]bool
 	shown   map[int]keymapp.Colour // what each LED shows now; absent = layout
 	peak    *keymapp.Colour        // peak dot colour; nil = no dots
@@ -40,9 +29,10 @@ func (r *Renderer) WithPeaks(c keymapp.Colour) *Renderer {
 }
 
 // New returns a renderer. colours run bottom to top and are stretched over
-// the grid's height; reserved LEDs are never touched.
-func New(grid layout.Grid, leds keymapp.LEDs, colours []keymapp.Colour, off Off, reserve []int) *Renderer {
-	r := &Renderer{grid: grid, leds: leds, off: off, reserve: map[int]bool{}, shown: map[int]keymapp.Colour{}}
+// the grid's height; reserved LEDs are never touched. Unlit keys are dark:
+// once Keymapp drives any key, the firmware shows only what the API sets.
+func New(grid layout.Grid, leds keymapp.LEDs, colours []keymapp.Colour, reserve []int) *Renderer {
+	r := &Renderer{grid: grid, leds: leds, reserve: map[int]bool{}, shown: map[int]keymapp.Colour{}}
 	for _, l := range reserve {
 		r.reserve[l] = true
 	}
@@ -72,7 +62,7 @@ func (r *Renderer) Target(heights, peaks []int) map[int]keymapp.Colour {
 				t[led] = r.colours[level]
 			case r.peak != nil && x < len(peaks) && peaks[x] == level+1:
 				t[led] = *r.peak
-			case r.off == Dark:
+			default:
 				t[led] = keymapp.Colour{}
 			}
 		}
@@ -94,15 +84,6 @@ func (r *Renderer) Frame(heights, peaks []int) (int, error) {
 		}
 		r.shown[led] = c
 		sent++
-	}
-	for led := range r.shown {
-		if _, ok := target[led]; !ok {
-			if err := r.leds.Restore(led); err != nil {
-				return sent, err
-			}
-			delete(r.shown, led)
-			sent++
-		}
 	}
 	return sent, nil
 }
@@ -135,4 +116,14 @@ func ParseColours(s string) ([]keymapp.Colour, error) {
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// Scale turns fine-grained heights (fine steps per key) into key levels,
+// amplified by gain, rounded, and capped at height.
+func Scale(heights []int, fine int, gain float64, height int) []int {
+	out := make([]int, len(heights))
+	for i, h := range heights {
+		out[i] = min(height, int(float64(h)*gain/float64(fine)+0.5))
+	}
+	return out
 }

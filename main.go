@@ -125,15 +125,15 @@ func run(args []string) error {
 	fl := flag.NewFlagSet("keybars", flag.ContinueOnError)
 	c := commonFlags(fl)
 	height := fl.Int("height", 0, "bar height in rows from the bottom; 0 = all but the top row")
-	colours := fl.String("colours", "#00ff00,#aaff00,#ffff00,#ff8000,#ff0000", "bar colours, bottom to top")
-	off := fl.String("off", "dark", "unlit keys: dark, or layout (keep the layout's colours)")
+	colours := fl.String("colours", "#00ff00", "bar colours, bottom to top (e.g. #00ff00,#ffff00,#ff0000 for a meter)")
+	gain := fl.Float64("gain", 1.5, "amplify the music before it becomes bars: higher reaches the top more often")
 	reserve := fl.String("reserve", "", "comma-separated LEDs never to touch")
 	fps := fl.Int("fps", 30, "frames per second asked of cava")
 	smooth := fl.Int("smooth", 35, "cava smoothing, 0-100: lower is jumpier, higher is smoother")
 	idle := fl.Duration("idle", time.Second, "silence before the keys go back to the layout")
 	refresh := fl.Duration("refresh", 2*time.Second, "resend every key this often, in case something reset the board")
 	stdin := fl.Bool("stdin", false, "read frames (cava raw ascii, \"3;5;1;...\") from stdin instead of running cava")
-	peaks := fl.Bool("peaks", false, "falling peak dots above the bars")
+	peaks := fl.Bool("peaks", true, "falling peak dots above the bars (-peaks=false to hide)")
 	peakColour := fl.String("peak-colour", "#ffffff", "peak dot colour")
 	peakHold := fl.Duration("peak-hold", 400*time.Millisecond, "how long a peak dot holds before falling")
 	peakFall := fl.Float64("peak-fall", 6, "how fast peak dots fall, in rows per second")
@@ -145,14 +145,6 @@ func run(args []string) error {
 	cs, err := bars.ParseColours(*colours)
 	if err != nil {
 		return err
-	}
-	offMode := bars.Dark
-	switch *off {
-	case "dark":
-	case "layout":
-		offMode = bars.Layout
-	default:
-		return fmt.Errorf("-off %q: want dark or layout", *off)
 	}
 	var reserved []int
 	for _, s := range strings.Split(*reserve, ",") {
@@ -179,7 +171,7 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	r := bars.New(grid, client, cs, offMode, reserved)
+	r := bars.New(grid, client, cs, reserved)
 	var pk *bars.Peaks
 	if *peaks {
 		pc, err := bars.ParseColours(*peakColour)
@@ -193,15 +185,27 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// cava reports in finer steps than keys (fine per key), so the gain can
+	// lift quiet bars without losing their shape; -stdin frames are in keys
+	const fine = 8
 	frames := make(chan []int)
+	raw := make(chan []int)
 	srcErr := make(chan error, 1)
 	go func() {
 		if *stdin {
 			srcErr <- source.Read(os.Stdin, frames)
 		} else {
-			srcErr <- source.Cava(ctx, grid.Columns(), grid.Height, *fps, *smooth, frames)
+			srcErr <- source.Cava(ctx, grid.Columns(), grid.Height*fine, *fps, *smooth, raw)
 		}
 	}()
+	if !*stdin {
+		go func() {
+			defer close(frames)
+			for f := range raw {
+				frames <- bars.Scale(f, fine, *gain, grid.Height)
+			}
+		}()
+	}
 
 	var st stats
 	start := time.Now()
@@ -351,7 +355,7 @@ func test(args []string) error {
 		return err
 	}
 	cs, _ := bars.ParseColours("#00ff00,#ffff00,#ff0000")
-	r := bars.New(grid, client, cs, bars.Dark, nil)
+	r := bars.New(grid, client, cs, nil)
 	defer r.Clear()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

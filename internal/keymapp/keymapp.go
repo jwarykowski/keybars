@@ -25,8 +25,6 @@ type Colour struct{ R, G, B uint8 }
 type LEDs interface {
 	// Set colours one LED.
 	Set(led int, c Colour) error
-	// Restore returns one LED to its layout colour.
-	Restore(led int) error
 	// RestoreAll returns every LED to its layout colour.
 	RestoreAll() error
 }
@@ -80,13 +78,9 @@ func (c *Client) Set(led int, col Colour) error {
 	return c.call("SetRGBLed", fields(led, int(col.R), int(col.G), int(col.B), 0))
 }
 
-// Restore returns one LED to its layout colour: Keymapp reverts a colour
-// once its sustain (ms) runs out.
-func (c *Client) Restore(led int) error {
-	return c.call("SetRGBLed", fields(led, 0, 0, 0, 1))
-}
-
-// RestoreAll returns every LED to its layout colour.
+// RestoreAll hands the board back to the layout's colours. Keymapp does it
+// by ending API control, so it is all or nothing: there is no per-key
+// restore, and while the API drives any key the rest are dark.
 func (c *Client) RestoreAll() error {
 	return c.call("SetRGBAll", fields(0, 0, 0, 1))
 }

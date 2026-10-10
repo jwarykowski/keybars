@@ -1,6 +1,7 @@
 package bars
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,13 +17,11 @@ func led(g layout.Grid, x, level int) int {
 
 // fake records what a renderer sends.
 type fake struct {
-	set      map[int]keymapp.Colour
-	restored []int
-	all      int
+	set map[int]keymapp.Colour
+	all int
 }
 
 func (f *fake) Set(led int, c keymapp.Colour) error { f.set[led] = c; return nil }
-func (f *fake) Restore(led int) error               { f.restored = append(f.restored, led); return nil }
 func (f *fake) RestoreAll() error                   { f.all++; return nil }
 
 var (
@@ -34,7 +33,7 @@ var (
 // columns is the test grid's width: 12 bars, 2 rows.
 const columns = 12
 
-func setup(t *testing.T, off Off, reserve ...int) (*Renderer, *fake, layout.Grid) {
+func setup(t *testing.T, reserve ...int) (*Renderer, *fake, layout.Grid) {
 	t.Helper()
 	m, err := layout.Parse("t", strings.NewReader(`
  0  1  2  3  4  5  6  7  8  9 10 11
@@ -48,11 +47,11 @@ func setup(t *testing.T, off Off, reserve ...int) (*Renderer, *fake, layout.Grid
 		t.Fatal(err)
 	}
 	f := &fake{set: map[int]keymapp.Colour{}}
-	return New(g, f, []keymapp.Colour{green, red}, off, reserve), f, g
+	return New(g, f, []keymapp.Colour{green, red}, reserve), f, g
 }
 
 func TestFrameColoursByLevel(t *testing.T) {
-	r, f, g := setup(t, Dark)
+	r, f, g := setup(t)
 	heights := make([]int, columns)
 	heights[0] = 2
 	heights[1] = 1
@@ -71,7 +70,7 @@ func TestFrameColoursByLevel(t *testing.T) {
 }
 
 func TestFrameSendsOnlyChanges(t *testing.T) {
-	r, f, _ := setup(t, Dark)
+	r, f, _ := setup(t)
 	heights := make([]int, columns)
 	r.Frame(heights, nil)
 	heights[3] = 1
@@ -85,25 +84,10 @@ func TestFrameSendsOnlyChanges(t *testing.T) {
 	_ = f
 }
 
-func TestLayoutOffRestoresKeys(t *testing.T) {
-	r, f, g := setup(t, Layout)
-	heights := make([]int, columns)
-	heights[5] = 1
-	r.Frame(heights, nil)
-	if len(f.set) != 1 {
-		t.Fatalf("set %d LEDs, want only the lit one", len(f.set))
-	}
-	heights[5] = 0
-	r.Frame(heights, nil)
-	if len(f.restored) != 1 || f.restored[0] != led(g, 5, 0) {
-		t.Errorf("restored %v, want [%d]", f.restored, led(g, 5, 0))
-	}
-}
-
 func TestReserveIsNeverTouched(t *testing.T) {
-	_, _, g := setup(t, Dark)
+	_, _, g := setup(t)
 	keep := led(g, 2, 0)
-	r, f, _ := setup(t, Dark, keep)
+	r, f, _ := setup(t, keep)
 	heights := make([]int, columns)
 	heights[2] = 2
 	r.Frame(heights, nil)
@@ -123,7 +107,7 @@ func TestParseColours(t *testing.T) {
 }
 
 func TestPeakDot(t *testing.T) {
-	r, f, g := setup(t, Dark)
+	r, f, g := setup(t)
 	r.WithPeaks(keymapp.Colour{B: 255})
 	heights := make([]int, columns)
 	peaks := make([]int, columns)
@@ -140,7 +124,7 @@ func TestPeakDot(t *testing.T) {
 }
 
 func TestInvalidateResends(t *testing.T) {
-	r, f, _ := setup(t, Dark)
+	r, f, _ := setup(t)
 	heights := make([]int, columns)
 	r.Frame(heights, nil)
 	r.Invalidate()
@@ -148,4 +132,17 @@ func TestInvalidateResends(t *testing.T) {
 		t.Errorf("after Invalidate sent %d, want the whole %d-LED grid", n, columns*2)
 	}
 	_ = f
+}
+
+func TestScale(t *testing.T) {
+	// fine = 8 steps per key: 4 steps is half a key, so gain 1 rounds it up
+	// to 1 and gain 2 makes it a whole key; nothing passes the height
+	got := Scale([]int{0, 4, 12, 32}, 8, 1, 4)
+	if want := []int{0, 1, 2, 4}; !slices.Equal(got, want) {
+		t.Errorf("gain 1: %v, want %v", got, want)
+	}
+	got = Scale([]int{0, 4, 12, 32}, 8, 2, 4)
+	if want := []int{0, 1, 3, 4}; !slices.Equal(got, want) {
+		t.Errorf("gain 2: %v, want %v", got, want)
+	}
 }
