@@ -125,7 +125,7 @@ func run(args []string) error {
 	fl := flag.NewFlagSet("keybars", flag.ContinueOnError)
 	c := commonFlags(fl)
 	height := fl.Int("height", 0, "bar height in rows from the bottom; 0 = all but the top row")
-	colours := fl.String("colours", "#00cc44,#88dd00,#ffcc00,#ff6600,#ff0000", "bar colours, bottom to top")
+	colours := fl.String("colours", "#00ff00,#aaff00,#ffff00,#ff8000,#ff0000", "bar colours, bottom to top")
 	off := fl.String("off", "dark", "unlit keys: dark, or layout (keep the layout's colours)")
 	reserve := fl.String("reserve", "", "comma-separated LEDs never to touch")
 	fps := fl.Int("fps", 30, "frames per second asked of cava")
@@ -325,7 +325,7 @@ func test(args []string) error {
 	if err != nil {
 		return err
 	}
-	cs, _ := bars.ParseColours("#00cc44,#ffcc00,#ff0000")
+	cs, _ := bars.ParseColours("#00ff00,#ffff00,#ff0000")
 	r := bars.New(grid, client, cs, bars.Dark, nil)
 	defer r.Clear()
 
