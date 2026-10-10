@@ -97,6 +97,11 @@ go test ./...
 go vet ./...
 ```
 
+## Support
+
+keybars is free and MIT licensed. If it makes your desk a bit more fun, you
+can [sponsor its development](https://github.com/sponsors/jwarykowski).
+
 ## License
 
 MIT
