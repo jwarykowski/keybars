@@ -45,6 +45,7 @@ go install github.com/jwarykowski/keybars@latest
 keybars                      # the connected keyboard, bars 4 rows high
 keybars -model voyager       # pick a built-in map
 keybars -map my-board.txt    # or your own
+keybars gen zsa/voyager      # write a map from QMK's definition
 keybars -height 5            # use the number row too
 keybars -colours '#00ff00,#ffff00,#ff0000'   # meter colours, bottom to top
 keybars -gain 2              # reach the top more often (default 1.5)
@@ -80,10 +81,30 @@ Columns become bars and rows become levels, so any size works. `-` marks a gap, 
 
 `keybars maps` lists the built-in maps and which one the connected keyboard
 uses (matched on the name Keymapp reports). The Moonlander map is tested on
-a real board; the Voyager map follows the same numbering but is untested, so
-corrections are welcome.
+a real board, and `keybars gen` reproduces it from QMK; the Voyager map is
+generated the same way but untested on a board, so corrections are welcome.
 
 ### Adding a keyboard
+
+If QMK knows the keyboard, `keybars gen` writes its map from QMK's
+definition in [qmk_firmware/keyboards](https://github.com/qmk/qmk_firmware/tree/master/keyboards):
+
+```sh
+keybars gen zsa/voyager > voyager.txt     # fetched from qmk_firmware
+keybars gen path/to/keyboard.json         # or a local copy
+keybars gen -order firmware zsa/moonlander  # QMK's own LED order
+```
+
+Keymapp's index is not the firmware's LED order: it numbers each half row by
+row, thumbs last, while the Moonlander's firmware runs down each column. `gen`
+follows Keymapp by default; `-order firmware` gives QMK's `rgb_matrix`
+order, for backends that talk to the firmware directly. The thumb cluster
+and a split half's short inner column are left out (`-inner` keeps the
+latter). Definitions that inherit from a parent `info.json` aren't followed
+yet, so pass a merged file (`qmk info -kb <keyboard> -f json`) for those.
+Check the result with `keybars test` as below.
+
+Otherwise, find the indices by hand:
 
 1. `keybars find` darkens the board and lights one key at a time, printing
    its index (Keymapp never lights index 0, so start from 1); press Enter for the next. Write each index where its key sits.
