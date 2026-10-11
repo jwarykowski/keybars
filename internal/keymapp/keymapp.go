@@ -14,20 +14,16 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/jwarykowski/keybars/internal/rgb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Colour is an RGB colour.
-type Colour struct{ R, G, B uint8 }
+type Colour = rgb.Colour
 
-// LEDs is what the renderer needs from a keyboard, so tests can record calls.
-type LEDs interface {
-	// Set colours one LED.
-	Set(led int, c Colour) error
-	// RestoreAll returns every LED to its layout colour.
-	RestoreAll() error
-}
+// LEDs is what the renderer needs from a keyboard.
+type LEDs = rgb.LEDs
 
 // Client is a connection to Keymapp.
 type Client struct {

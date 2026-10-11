@@ -146,3 +146,34 @@ func TestScale(t *testing.T) {
 		t.Errorf("gain 2: %v, want %v", got, want)
 	}
 }
+
+// flushing is a backend that buffers Sets, as OpenRGB's does.
+type flushing struct {
+	fake
+	flushes int
+}
+
+func (f *flushing) Flush() error { f.flushes++; return nil }
+
+// A buffering backend is flushed once per frame that changed something.
+func TestFrameFlushesOnce(t *testing.T) {
+	m, err := layout.Parse("t", strings.NewReader("0 1 2\n3 4 5\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _ := layout.New(m, 2)
+	f := &flushing{fake: fake{set: map[int]keymapp.Colour{}}}
+	r := New(g, f, []keymapp.Colour{green}, nil)
+	for i, want := range []int{1, 1, 2} {
+		h := []int{2, 1, 0}
+		if i == 2 {
+			h = []int{0, 1, 0}
+		}
+		if _, err := r.Frame(h, nil); err != nil {
+			t.Fatal(err)
+		}
+		if f.flushes != want {
+			t.Errorf("frame %d: %d flushes, want %d", i, f.flushes, want)
+		}
+	}
+}
