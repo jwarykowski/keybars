@@ -52,6 +52,7 @@ keybars -gain 2              # reach the top more often (default 1.5)
 keybars -peaks=false         # no peak dots
 keybars -reserve 36,61       # never touch these LEDs
 keybars -smooth 15           # jumpier (0-100, default 35)
+keybars -source 'BlackHole 2ch'   # cava capture device (macOS needs a loopback)
 ```
 
 Stop it with Ctrl-C. `-v` prints the frame rate on exit.

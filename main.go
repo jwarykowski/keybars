@@ -135,6 +135,7 @@ func run(args []string) error {
 	reserve := fl.String("reserve", "", "comma-separated LEDs never to touch")
 	fps := fl.Int("fps", 30, "frames per second asked of cava")
 	smooth := fl.Int("smooth", 35, "cava smoothing, 0-100: lower is jumpier, higher is smoother")
+	cavaSource := fl.String("source", "", "cava capture device (e.g. \"BlackHole 2ch\" on macOS); empty = cava's default")
 	idle := fl.Duration("idle", time.Second, "silence before the keys go back to the layout")
 	refresh := fl.Duration("refresh", 2*time.Second, "resend every key this often, in case something reset the board")
 	stdin := fl.Bool("stdin", false, "read frames (cava raw ascii, \"3;5;1;...\") from stdin instead of running cava")
@@ -200,7 +201,7 @@ func run(args []string) error {
 		if *stdin {
 			srcErr <- source.Read(os.Stdin, frames)
 		} else {
-			srcErr <- source.Cava(ctx, grid.Columns(), grid.Height*fine, *fps, *smooth, raw)
+			srcErr <- source.Cava(ctx, grid.Columns(), grid.Height*fine, *fps, *smooth, *cavaSource, raw)
 		}
 	}()
 	if !*stdin {
