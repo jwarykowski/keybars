@@ -44,9 +44,14 @@ usage:
   keybars find [flags]    light LEDs one at a time to write a map
   keybars gen KEYBOARD    write a map from QMK's definition of a keyboard
   keybars maps            list the built-in maps and the connected keyboard
+  keybars start [flags]   run in the background
+  keybars stop            stop the background keybars
+  keybars status          show whether keybars is running in the background
   keybars version         print the version
 
-Run a command with -h for its flags.
+Run a command with -h for its flags. keybars and keybars start read their
+settings from ~/.config/keybars/config, one flag per line ("gain = 2");
+flags on the command line override it.
 `
 
 func main() {
@@ -66,6 +71,12 @@ func main() {
 		err = gen(args)
 	case "maps":
 		err = listMaps(args)
+	case "start":
+		err = start(args)
+	case "stop":
+		err = stop()
+	case "status":
+		err = status()
 	case "version":
 		fmt.Println("keybars", version())
 	case "help":
@@ -147,6 +158,10 @@ func run(args []string) error {
 	peakHold := fl.Duration("peak-hold", 400*time.Millisecond, "how long a peak dot holds before falling")
 	peakFall := fl.Float64("peak-fall", 6, "how fast peak dots fall, in rows per second")
 	verbose := fl.Bool("v", false, "print frames painted and LEDs sent on exit")
+	fl.String("config", "", "settings file (default: ~/.config/keybars/config)")
+	if err := loadConfig(fl, args); err != nil {
+		return err
+	}
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
