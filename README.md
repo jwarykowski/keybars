@@ -1,7 +1,4 @@
-<table>
-<tr>
-<td width="200" valign="top"><img src="assets/keybars.png" alt="keybars" width="180"></td>
-<td valign="top">
+<p align="center"><img src="assets/keybars.svg" alt="keybars" width="120"></p>
 
 # keybars
 
@@ -53,6 +50,7 @@ keybars -peaks=false         # no peak dots
 keybars -reserve 36,61       # never touch these LEDs
 keybars -smooth 15           # jumpier (0-100, default 35)
 keybars -source 'BlackHole 2ch'   # cava capture device (macOS needs a loopback)
+keybars version              # the installed version
 ```
 
 Stop it with Ctrl-C. `-v` prints the frame rate on exit.
@@ -128,9 +126,5 @@ keybars is free and MIT licensed. If it makes your desk a bit more fun, you
 can [sponsor its development](https://github.com/sponsors/jwarykowski).
 
 ## License
-
-</td>
-</tr>
-</table>
 
 MIT
