@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jwarykowski/keybars/internal/keymapp"
-	"github.com/jwarykowski/keybars/internal/layout"
+	"github.com/jwarykowski/keybars/pkg/keymapp"
+	"github.com/jwarykowski/keybars/pkg/layout"
 )
 
 // Renderer paints frames onto a keyboard.

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jwarykowski/keybars/internal/keymapp"
-	"github.com/jwarykowski/keybars/internal/layout"
+	"github.com/jwarykowski/keybars/pkg/keymapp"
+	"github.com/jwarykowski/keybars/pkg/layout"
 )
 
 // led is the LED under bar x at level in the test grid.
