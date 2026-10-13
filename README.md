@@ -29,13 +29,17 @@ holds a moment and falls like a hi-fi meter.
   (`dnf install cava`, `apt install cava`, `brew install cava`; macOS also
   needs a loopback device such as [BlackHole](https://github.com/ExistentialAudio/BlackHole):
   see [macOS audio](#macos-audio))
-- Go 1.25+ to build
+- Go 1.25+ to build from source
 
 ## Install
 
 ```sh
-go install github.com/jwarykowski/keybars@latest
+brew install jwarykowski/tap/keybars    # macOS or Linux; brings cava too
+go install github.com/jwarykowski/keybars@latest   # or from source
 ```
+
+Releases also have binaries for macOS and Linux on
+[GitHub](https://github.com/jwarykowski/keybars/releases).
 
 ## Usage
 
@@ -225,6 +229,11 @@ Otherwise, find the indices by hand:
 go test ./...
 go vet ./...
 ```
+
+Pushing a `v*` tag runs GoReleaser (`.goreleaser.yaml`): it builds the
+binaries, publishes the GitHub release and opens a pull request on
+[jwarykowski/homebrew-tap](https://github.com/jwarykowski/homebrew-tap) with
+the formula. It needs a `GH_RELEASE_TOKEN` secret with write access to the tap.
 
 ## Support
 
