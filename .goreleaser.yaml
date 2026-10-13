@@ -1,0 +1,80 @@
+# Release builds for keybars, run by .github/workflows/release.yml on a v* tag.
+# Binaries and checksums go on the GitHub release here; the Homebrew formula
+# goes to jwarykowski/homebrew-tap as a pull request (GH_RELEASE_TOKEN needs
+# write access to the tap).
+version: 2
+
+project_name: keybars
+
+before:
+  hooks:
+    - go test ./...
+
+builds:
+  - id: keybars
+    main: .
+    binary: keybars
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.buildVersion=v{{ .Version }}
+
+archives:
+  - id: keybars
+    ids: [keybars]
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+
+release:
+  name_template: "keybars {{ .Version }}"
+
+brews:
+  - name: keybars
+    ids: [keybars]
+    repository:
+      owner: jwarykowski
+      name: homebrew-tap
+      token: "{{ .Env.GH_RELEASE_TOKEN }}"
+      # the tap only takes changes through pull requests: push the formula to
+      # a branch and open one against main
+      branch: "keybars-{{ .Version }}"
+      pull_request:
+        enabled: true
+        base:
+          branch: main
+    directory: Formula
+    homepage: https://jwarykowski.dev/projects/keybars/
+    description: Music equaliser on your keyboard's backlight
+    license: MIT
+    dependencies:
+      - name: cava
+    commit_author:
+      name: Jonathan Warykowski
+      email: jonathan.chrisp@gmail.com
+    commit_msg_template: "feat: keybars {{ .Tag }}"
+    install: |
+      bin.install "keybars"
+    test: |
+      assert_match "keybars", shell_output("#{bin}/keybars version")
+    caveats: |
+      keybars drives ZSA keyboards through Keymapp: turn its API on in
+      Keymapp's settings. On macOS, cava needs a loopback device such as
+      BlackHole to hear what's playing:
+        https://jwarykowski.dev/projects/keybars/#macos-audio

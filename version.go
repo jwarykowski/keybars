@@ -2,9 +2,15 @@ package main
 
 import "runtime/debug"
 
-// version is the module version go install recorded, else the commit a local
-// build came from.
+// buildVersion is set by release builds: -ldflags "-X main.buildVersion=v0.2.0".
+var buildVersion string
+
+// version is the release build's version, else the module version go install
+// recorded, else the commit a local build came from.
 func version() string {
+	if buildVersion != "" {
+		return buildVersion
+	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "unknown"

@@ -5,6 +5,14 @@ import (
 	"testing"
 )
 
+func TestBuildVersionWins(t *testing.T) {
+	defer func(v string) { buildVersion = v }(buildVersion)
+	buildVersion = "v9.9.9"
+	if got := version(); got != "v9.9.9" {
+		t.Errorf("got %q, want v9.9.9", got)
+	}
+}
+
 func TestVersionOf(t *testing.T) {
 	rev := debug.BuildSetting{Key: "vcs.revision", Value: "32d50371a2b4c5d6e7f8"}
 	dirty := debug.BuildSetting{Key: "vcs.modified", Value: "true"}
