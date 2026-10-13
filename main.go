@@ -7,7 +7,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,20 +22,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jwarykowski/keybars/internal/bars"
-	"github.com/jwarykowski/keybars/internal/keymapp"
-	"github.com/jwarykowski/keybars/internal/layout"
-	"github.com/jwarykowski/keybars/internal/openrgb"
-	"github.com/jwarykowski/keybars/internal/qmk"
-	"github.com/jwarykowski/keybars/internal/rgb"
-	"github.com/jwarykowski/keybars/internal/source"
+	builtin "github.com/jwarykowski/keybars/maps"
+	"github.com/jwarykowski/keybars/pkg/bars"
+	"github.com/jwarykowski/keybars/pkg/keymapp"
+	"github.com/jwarykowski/keybars/pkg/layout"
+	"github.com/jwarykowski/keybars/pkg/openrgb"
+	"github.com/jwarykowski/keybars/pkg/qmk"
+	"github.com/jwarykowski/keybars/pkg/rgb"
+	"github.com/jwarykowski/keybars/pkg/source"
 )
 
-//go:embed maps/*.txt
-var embedded embed.FS
-
-// maps holds the built-in keyboard maps, maps/<model>.txt.
-var maps, _ = fs.Sub(embedded, "maps")
+// maps holds the built-in keyboard maps, <model>.txt.
+var maps fs.FS = builtin.FS
 
 const usage = `keybars: a music equaliser on your keyboard's backlight
 

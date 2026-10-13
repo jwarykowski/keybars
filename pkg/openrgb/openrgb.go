@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jwarykowski/keybars/internal/rgb"
+	"github.com/jwarykowski/keybars/pkg/rgb"
 )
 
 // DefaultAddr is where OpenRGB's SDK server listens by default.

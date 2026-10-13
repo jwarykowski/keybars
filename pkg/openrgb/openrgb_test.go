@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jwarykowski/keybars/internal/rgb"
+	"github.com/jwarykowski/keybars/pkg/rgb"
 )
 
 // testdata/controller_v1.bin is a keyboard's description at protocol 1, made

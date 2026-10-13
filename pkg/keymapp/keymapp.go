@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/jwarykowski/keybars/internal/rgb"
+	"github.com/jwarykowski/keybars/pkg/rgb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
