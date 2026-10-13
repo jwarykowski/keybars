@@ -44,14 +44,15 @@ usage:
   keybars find [flags]    light LEDs one at a time to write a map
   keybars gen KEYBOARD    write a map from QMK's definition of a keyboard
   keybars maps            list the built-in maps and the connected keyboard
+  keybars version         print the version
 
 Run a command with -h for its flags.
 `
 
 func main() {
 	cmd, args := "run", os.Args[1:]
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		cmd, args = args[0], args[1:]
+	if len(args) > 0 && (!strings.HasPrefix(args[0], "-") || args[0] == "-version" || args[0] == "--version") {
+		cmd, args = strings.TrimLeft(args[0], "-"), args[1:]
 	}
 	var err error
 	switch cmd {
@@ -65,6 +66,8 @@ func main() {
 		err = gen(args)
 	case "maps":
 		err = listMaps(args)
+	case "version":
+		fmt.Println("keybars", version())
 	case "help":
 		fmt.Print(usage)
 	default:
