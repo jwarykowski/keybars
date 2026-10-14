@@ -11,6 +11,10 @@
 // LED colours are buffered and sent once per frame (Flush) as a full
 // UPDATELEDS: many OpenRGB drivers update the whole device for each LED, so
 // per-LED packets would be slower, not faster.
+//
+// The server announces device list changes (a rescan, a device plugged in or
+// out) unprompted. A Device then finds itself again by name, serial and
+// location, since its index may have moved and a rescan resets its mode.
 package openrgb
 
 import (
@@ -23,6 +27,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jwarykowski/keybars/pkg/rgb"
@@ -35,6 +40,7 @@ const DefaultAddr = "127.0.0.1:6742"
 const (
 	requestControllerCount = 0
 	requestControllerData  = 1
+	deviceListUpdated      = 100
 	requestProtocolVersion = 40
 	setClientName          = 50
 	updateLEDs             = 1050
@@ -55,12 +61,25 @@ const (
 	noLED        = 0xFFFFFFFF
 )
 
+// timeout bounds every request, so a stalled server can't hang keybars.
+const timeout = 5 * time.Second
+
+var errNoReply = errors.New("openrgb: no reply")
+
 // Client is a connection to an OpenRGB SDK server.
 type Client struct {
 	conn    net.Conn
-	r       *bufio.Reader
-	mu      sync.Mutex
+	mu      sync.Mutex // one request or send at a time
+	replies chan reply
+	done    chan struct{} // closed once the connection ends; then readErr says why
+	readErr error
+	changed atomic.Bool // the device list changed since Controllers last read it
 	version uint32
+}
+
+type reply struct {
+	id   uint32
+	data []byte
 }
 
 // Dial connects to the server at addr and agrees on a protocol version.
@@ -69,17 +88,15 @@ func Dial(addr string) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("openrgb %s: %w (is OpenRGB running with its SDK server on?)", addr, err)
 	}
-	c := &Client{conn: conn, r: bufio.NewReader(conn)}
+	c := &Client{conn: conn, replies: make(chan reply, 8), done: make(chan struct{})}
+	go c.read()
 	// Servers older than the version handshake never answer it: that is
 	// protocol 0.
-	conn.SetReadDeadline(time.Now().Add(time.Second))
-	reply, err := c.request(0, requestProtocolVersion, u32(protocolVersion))
-	conn.SetReadDeadline(time.Time{})
-	var ne net.Error
+	data, err := c.request(0, requestProtocolVersion, u32(protocolVersion), time.Second)
 	switch {
-	case err == nil && len(reply) >= 4:
-		c.version = min(protocolVersion, binary.LittleEndian.Uint32(reply))
-	case errors.As(err, &ne) && ne.Timeout():
+	case err == nil && len(data) >= 4:
+		c.version = min(protocolVersion, binary.LittleEndian.Uint32(data))
+	case errors.Is(err, errNoReply):
 		c.version = 0
 	case err != nil:
 		conn.Close()
@@ -97,7 +114,8 @@ func (c *Client) Close() error { return c.conn.Close() }
 
 // Controllers describes every device the server has.
 func (c *Client) Controllers() ([]Controller, error) {
-	reply, err := c.request(0, requestControllerCount, nil)
+	c.changed.Store(false)
+	reply, err := c.request(0, requestControllerCount, nil, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +129,7 @@ func (c *Client) Controllers() ([]Controller, error) {
 		if c.version > 0 {
 			data = u32(c.version)
 		}
-		reply, err := c.request(i, requestControllerData, data)
+		reply, err := c.request(i, requestControllerData, data, timeout)
 		if err != nil {
 			return nil, err
 		}
@@ -156,30 +174,65 @@ func (c *Client) Open(name string) (*Device, error) {
 	return &Device{c: c, ctl: ctl}, nil
 }
 
+// read takes every packet the server sends: device list updates set changed,
+// and replies go to the request waiting for them.
+func (c *Client) read() {
+	defer close(c.done)
+	r := bufio.NewReader(c.conn)
+	for {
+		var h [16]byte
+		if _, err := io.ReadFull(r, h[:]); err != nil {
+			c.readErr = err
+			return
+		}
+		if string(h[:4]) != "ORGB" {
+			c.readErr = errors.New("openrgb: bad packet header")
+			return
+		}
+		id := binary.LittleEndian.Uint32(h[8:])
+		body := make([]byte, binary.LittleEndian.Uint32(h[12:]))
+		if _, err := io.ReadFull(r, body); err != nil {
+			c.readErr = err
+			return
+		}
+		if id == deviceListUpdated {
+			c.changed.Store(true)
+			continue
+		}
+		select {
+		case c.replies <- reply{id, body}:
+		default: // nobody is waiting: a reply that came too late
+		}
+	}
+}
+
 // request sends a packet and returns the data of the server's reply with the
-// same id, skipping anything else it sends meanwhile (device list updates).
-func (c *Client) request(dev, id uint32, data []byte) ([]byte, error) {
+// same id, or errNoReply after wait.
+func (c *Client) request(dev, id uint32, data []byte, wait time.Duration) ([]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	for drained := false; !drained; {
+		select {
+		case <-c.replies: // a late reply to an earlier request
+		default:
+			drained = true
+		}
+	}
 	if err := c.write(dev, id, data); err != nil {
 		return nil, err
 	}
+	expire := time.NewTimer(wait)
+	defer expire.Stop()
 	for {
-		var h [16]byte
-		if _, err := io.ReadFull(c.r, h[:]); err != nil {
-			return nil, err
-		}
-		if string(h[:4]) != "ORGB" {
-			return nil, errors.New("openrgb: bad packet header")
-		}
-		gotID := binary.LittleEndian.Uint32(h[8:])
-		size := binary.LittleEndian.Uint32(h[12:])
-		body := make([]byte, size)
-		if _, err := io.ReadFull(c.r, body); err != nil {
-			return nil, err
-		}
-		if gotID == id {
-			return body, nil
+		select {
+		case r := <-c.replies:
+			if r.id == id {
+				return r.data, nil
+			}
+		case <-c.done:
+			return nil, c.readErr
+		case <-expire.C:
+			return nil, errNoReply
 		}
 	}
 }
@@ -210,6 +263,7 @@ type Device struct {
 	c      *Client
 	ctl    Controller
 	direct bool
+	gone   bool // unplugged or no longer listed: frames are dropped until it's back
 	buf    []rgb.Colour
 	dirty  bool
 }
@@ -258,7 +312,11 @@ func (d *Device) SetAll(col rgb.Colour) error {
 
 // Flush sends the buffered colours, if any changed.
 func (d *Device) Flush() error {
-	if !d.dirty {
+	there, err := d.follow()
+	if err != nil {
+		return err
+	}
+	if !there || !d.dirty {
 		return nil
 	}
 	d.dirty = false
@@ -271,7 +329,11 @@ func (d *Device) RestoreAll() error {
 	if !d.direct {
 		return nil
 	}
+	there, err := d.follow()
 	d.direct, d.dirty = false, false
+	if err != nil || !there {
+		return err
+	}
 	i := d.ctl.ActiveMode
 	if i < 0 || int(i) >= len(d.ctl.Modes) {
 		return nil
@@ -292,8 +354,14 @@ func (d *Device) enterDirect() error {
 	if d.direct {
 		return nil
 	}
-	if err := d.c.send(d.ctl.Index, setCustomMode, nil); err != nil {
+	there, err := d.follow()
+	if err != nil {
 		return err
+	}
+	if there {
+		if err := d.c.send(d.ctl.Index, setCustomMode, nil); err != nil {
+			return err
+		}
 	}
 	d.direct = true
 	d.buf = make([]rgb.Colour, len(d.ctl.LEDs))
@@ -301,6 +369,60 @@ func (d *Device) enterDirect() error {
 		copy(d.buf, d.ctl.Colours)
 	}
 	return nil
+}
+
+// follow finds the device again once the server's device list has changed,
+// and reports whether it's there. Its index may have moved, and a rescan puts
+// devices back in their saved mode, so when keybars was driving it, it goes
+// back to per-LED and its whole frame is sent again on the next Flush.
+func (d *Device) follow() (bool, error) {
+	if !d.c.changed.Load() {
+		return !d.gone, nil
+	}
+	ctls, err := d.c.Controllers()
+	if err != nil {
+		return false, err
+	}
+	i := same(ctls, d.ctl)
+	if i < 0 {
+		d.gone = true
+		return false, nil
+	}
+	d.ctl.Index, d.gone = ctls[i].Index, false
+	if d.direct {
+		if err := d.c.send(d.ctl.Index, setCustomMode, nil); err != nil {
+			return false, err
+		}
+		d.dirty = true
+	}
+	return true, nil
+}
+
+// same is ctl's position in ctls, matched on name, serial and location, then
+// name and serial, then a name only one device has; -1 when it's not there.
+// Any match must have the same number of LEDs, or the frame won't fit.
+func same(ctls []Controller, ctl Controller) int {
+	fits := func(c Controller) bool { return c.Name == ctl.Name && len(c.LEDs) == len(ctl.LEDs) }
+	if i := slices.IndexFunc(ctls, func(c Controller) bool {
+		return fits(c) && c.Serial == ctl.Serial && c.Location == ctl.Location
+	}); i >= 0 {
+		return i
+	}
+	if ctl.Serial != "" {
+		if i := slices.IndexFunc(ctls, func(c Controller) bool { return fits(c) && c.Serial == ctl.Serial }); i >= 0 {
+			return i
+		}
+	}
+	found := -1
+	for i, c := range ctls {
+		if fits(c) {
+			if found >= 0 {
+				return -1
+			}
+			found = i
+		}
+	}
+	return found
 }
 
 // encodeColours is UPDATELEDS' data: its own size, a count, then RGBx.

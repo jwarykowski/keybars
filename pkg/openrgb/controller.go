@@ -14,6 +14,8 @@ type Controller struct {
 	Type       int32
 	Name       string
 	Vendor     string // protocol 1 and up
+	Serial     string
+	Location   string // where the server reaches it, e.g. "HID: /dev/hidraw3"
 	ActiveMode int32
 	Modes      []Mode
 	Zones      []Zone
@@ -62,8 +64,8 @@ func ParseController(b []byte, version uint32) (ctl Controller, err error) {
 	}
 	r.str() // description
 	r.str() // version
-	r.str() // serial
-	r.str() // location
+	ctl.Serial = r.str()
+	ctl.Location = r.str()
 	nModes := r.u16()
 	ctl.ActiveMode = r.i32()
 	for range nModes {
