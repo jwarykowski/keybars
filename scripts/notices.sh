@@ -40,7 +40,7 @@ fi
 		read -r version dir < <(go list -m -f '{{.Version}} {{.Dir}}' "$mod")
 		printf '\n## %s %s\n' "$mod" "$version"
 		{
-			(cd "$dir" && find . -maxdepth 1 -type f \( -iname 'licen[cs]e*' -o -iname 'copying*' -o -iname 'notice*' \) | sed 's|^\./||' | sort)
+			(cd "$dir" && find . -maxdepth 1 -type f \( -iname 'licen[cs]e*' -o -iname 'copying*' -o -iname 'notice*' \) ! -name '*.go' | sed 's|^\./||' | sort)
 			bundled "$mod"
 		} | while read -r file; do
 			printf '\n### %s\n\n```\n' "$file"
