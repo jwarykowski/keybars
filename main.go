@@ -47,6 +47,7 @@ usage:
   keybars stop            stop the background keybars
   keybars status          show whether keybars is running in the background
   keybars version         print the version
+  keybars licences        print the licences of the code keybars includes
 
 Run a command with -h for its flags. keybars and keybars start read their
 settings from ~/.config/keybars/config, one flag per line ("gain = 2");
@@ -78,6 +79,8 @@ func main() {
 		err = status()
 	case "version":
 		fmt.Println("keybars", version())
+	case "licences", "licenses":
+		fmt.Print(notices)
 	case "help":
 		fmt.Print(usage)
 	default:
