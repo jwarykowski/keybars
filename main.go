@@ -26,7 +26,9 @@ import (
 	"github.com/jwarykowski/keybars/pkg/bars"
 	"github.com/jwarykowski/keybars/pkg/keymapp"
 	"github.com/jwarykowski/keybars/pkg/layout"
+	"github.com/jwarykowski/keybars/pkg/openrgb"
 	"github.com/jwarykowski/keybars/pkg/qmk"
+	"github.com/jwarykowski/keybars/pkg/rgb"
 	"github.com/jwarykowski/keybars/pkg/source"
 )
 
@@ -88,33 +90,73 @@ func main() {
 	}
 }
 
-// common are the flags every command takes.
+// keyboard is a backend: Keymapp, or a device through OpenRGB.
+type keyboard interface {
+	rgb.LEDs
+	// Keyboard is the keyboard's name, as the backend reports it.
+	Keyboard() (string, error)
+	SetAll(c rgb.Colour) error
+	Close() error
+}
+
+// conn are the flags that pick and reach a backend.
+type conn struct {
+	backend, socket, addr, device *string
+}
+
+func connFlags(fl *flag.FlagSet) conn {
+	return conn{
+		backend: fl.String("backend", "keymapp", "keymapp (ZSA boards) or openrgb (OpenRGB's SDK server)"),
+		socket:  fl.String("socket", "", "Keymapp socket (default: $KEYMAPP_SOCKET, else Keymapp's own)"),
+		addr:    fl.String("openrgb", openrgb.DefaultAddr, "OpenRGB SDK server address"),
+		device:  fl.String("device", "", "OpenRGB device: part of its name (default: the first keyboard)"),
+	}
+}
+
+func (c conn) connect() (keyboard, error) {
+	switch *c.backend {
+	case "keymapp":
+		path := *c.socket
+		if path == "" {
+			var err error
+			if path, err = keymapp.SocketPath(); err != nil {
+				return nil, err
+			}
+		}
+		return keymapp.Dial(path)
+	case "openrgb":
+		client, err := openrgb.Dial(*c.addr)
+		if err != nil {
+			return nil, err
+		}
+		d, err := client.Open(*c.device)
+		if err != nil {
+			client.Close()
+			return nil, err
+		}
+		return d, nil
+	}
+	return nil, fmt.Errorf("-backend %q: want keymapp or openrgb", *c.backend)
+}
+
+// common are the flags every command that paints a map takes.
 type common struct {
-	model, mapFile, socket *string
+	model, mapFile *string
+	conn
 }
 
 func commonFlags(fl *flag.FlagSet) common {
 	return common{
-		model:   fl.String("model", "", "built-in map: "+strings.Join(layout.Builtin(maps), ", ")+" (default: detect the connected keyboard)"),
+		model:   fl.String("model", "", "built-in Keymapp map: "+strings.Join(layout.Builtin(maps), ", ")+" (default: detect the connected keyboard)"),
 		mapFile: fl.String("map", "", "map file to use instead of a built-in one"),
-		socket:  fl.String("socket", "", "Keymapp socket (default: $KEYMAPP_SOCKET, else Keymapp's own)"),
+		conn:    connFlags(fl),
 	}
 }
 
-func connect(socket string) (*keymapp.Client, error) {
-	path := socket
-	if path == "" {
-		var err error
-		if path, err = keymapp.SocketPath(); err != nil {
-			return nil, err
-		}
-	}
-	return keymapp.Dial(path)
-}
-
-// loadMap reads -map, else the -model map, else the map matching the
-// keyboard Keymapp has connected.
-func loadMap(c common, client *keymapp.Client) (layout.Map, error) {
+// loadMap reads -map, else the -model map, else the map for the connected
+// keyboard: the built-in one matching Keymapp's name for it, or an OpenRGB
+// device's own key matrix.
+func loadMap(c common, kb keyboard) (layout.Map, error) {
 	if *c.mapFile != "" {
 		f, err := os.Open(*c.mapFile)
 		if err != nil {
@@ -123,18 +165,34 @@ func loadMap(c common, client *keymapp.Client) (layout.Map, error) {
 		defer f.Close()
 		return layout.Parse(*c.mapFile, f)
 	}
+	if d, ok := kb.(*openrgb.Device); ok {
+		if *c.model != "" {
+			return layout.Map{}, errors.New("-model maps are Keymapp's numbering; OpenRGB devices use their own key matrix, or -map FILE")
+		}
+		return openrgbMap(d)
+	}
 	model := *c.model
 	if model == "" {
-		kb, err := client.Keyboard()
+		name, err := kb.Keyboard()
 		if err != nil {
 			return layout.Map{}, err
 		}
 		var ok bool
-		if model, ok = layout.Detect(maps, kb); !ok {
-			return layout.Map{}, fmt.Errorf("no built-in map for %q: write one with `keybars find` and pass -map FILE", kb)
+		if model, ok = layout.Detect(maps, name); !ok {
+			return layout.Map{}, fmt.Errorf("no built-in map for %q: write one with `keybars find` and pass -map FILE", name)
 		}
 	}
 	return layout.Load(maps, model)
+}
+
+// openrgbMap is the map from an OpenRGB device's key matrix.
+func openrgbMap(d *openrgb.Device) (layout.Map, error) {
+	name, _ := d.Keyboard()
+	cells, ok := d.Map()
+	if !ok {
+		return layout.Map{}, fmt.Errorf("OpenRGB gives no key matrix for %s: write a map with `keybars find -backend openrgb` and pass -map FILE", name)
+	}
+	return layout.FromCells(name, cells)
 }
 
 func run(args []string) error {
@@ -179,7 +237,7 @@ func run(args []string) error {
 		reserved = append(reserved, n)
 	}
 
-	client, err := connect(*c.socket)
+	client, err := c.connect()
 	if err != nil {
 		return err
 	}
@@ -362,7 +420,7 @@ func test(args []string) error {
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
-	client, err := connect(*c.socket)
+	client, err := c.connect()
 	if err != nil {
 		return err
 	}
@@ -415,26 +473,40 @@ func test(args []string) error {
 // find lights LEDs one at a time and prints each index, to draw a map from.
 func find(args []string) error {
 	fl := flag.NewFlagSet("keybars find", flag.ContinueOnError)
-	socket := fl.String("socket", "", "Keymapp socket (default: $KEYMAPP_SOCKET, else Keymapp's own)")
-	from := fl.Int("from", 1, "first key index (Keymapp never lights 0)")
+	cf := connFlags(fl)
+	from := fl.Int("from", -1, "first key index (default: 1 on Keymapp, which never lights 0, else 0)")
 	to := fl.Int("to", 0, "last key index (default: until the keyboard has no more)")
 	auto := fl.Duration("auto", 0, "step on a timer instead of waiting for Enter")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
-	client, err := connect(*socket)
+	client, err := cf.connect()
 	if err != nil {
 		return err
 	}
 	defer client.Close()
+	if *from < 0 {
+		*from = 0
+		if *cf.backend == "keymapp" {
+			*from = 1
+		}
+	}
 	if kb, err := client.Keyboard(); err == nil {
 		fmt.Printf("%s: every key goes dark, then one lights at a time.\n", kb)
 	}
 	if *auto == 0 {
 		fmt.Println("Note the key under each LED number; Enter for the next, q to stop.")
 	}
-	white := keymapp.Colour{R: 255, G: 255, B: 255}
-	if err := client.SetAll(keymapp.Colour{}); err != nil {
+	// set colours one LED and shows it at once, on backends that buffer.
+	set := func(led int, c rgb.Colour) error {
+		if err := client.Set(led, c); err != nil {
+			return err
+		}
+		return rgb.Flush(client)
+	}
+	named, _ := client.(interface{ Name(led int) string })
+	white := rgb.Colour{R: 255, G: 255, B: 255}
+	if err := client.SetAll(rgb.Colour{}); err != nil {
 		return err
 	}
 	defer client.RestoreAll()
@@ -443,11 +515,14 @@ func find(args []string) error {
 	defer stop()
 	in := bufio.NewReader(os.Stdin)
 	for led := *from; *to == 0 || led <= *to; led++ {
-		if err := client.Set(led, white); err != nil {
+		if err := set(led, white); err != nil {
 			fmt.Printf("no LED %d: done\n", led)
 			return nil
 		}
 		fmt.Printf("LED %d ", led)
+		if named != nil {
+			fmt.Printf("(%s) ", named.Name(led))
+		}
 		if *auto > 0 {
 			fmt.Println()
 			select {
@@ -461,7 +536,7 @@ func find(args []string) error {
 				return nil
 			}
 		}
-		if err := client.Set(led, keymapp.Colour{}); err != nil {
+		if err := set(led, rgb.Colour{}); err != nil {
 			return err
 		}
 	}
@@ -470,9 +545,12 @@ func find(args []string) error {
 
 func listMaps(args []string) error {
 	fl := flag.NewFlagSet("keybars maps", flag.ContinueOnError)
-	socket := fl.String("socket", "", "Keymapp socket (default: $KEYMAPP_SOCKET, else Keymapp's own)")
+	cf := connFlags(fl)
 	if err := fl.Parse(args); err != nil {
 		return err
+	}
+	if *cf.backend == "openrgb" {
+		return listOpenRGB(cf)
 	}
 	for _, n := range layout.Builtin(maps) {
 		m, err := layout.Load(maps, n)
@@ -481,7 +559,7 @@ func listMaps(args []string) error {
 		}
 		fmt.Printf("%-12s %d columns x %d rows\n", n, m.Columns(), m.Rows())
 	}
-	client, err := connect(*socket)
+	client, err := cf.connect()
 	if err != nil {
 		return nil // listing works without Keymapp
 	}
@@ -496,6 +574,41 @@ func listMaps(args []string) error {
 		fmt.Printf("\nconnected: %s (no built-in map; see keybars find)\n", kb)
 	}
 	return nil
+}
+
+// listOpenRGB lists OpenRGB's devices, then prints the map keybars would use
+// for the chosen one, ready to save and edit for -map.
+func listOpenRGB(cf conn) error {
+	client, err := openrgb.Dial(*cf.addr)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	ctls, err := client.Controllers()
+	if err != nil {
+		return err
+	}
+	for _, ctl := range ctls {
+		matrix := "no key matrix"
+		if cells, ok := ctl.Map(); ok {
+			matrix = fmt.Sprintf("%dx%d key matrix", len(cells[0]), len(cells))
+		}
+		fmt.Printf("%-3d %s: %d LEDs, %s\n", ctl.Index, ctl.Name, len(ctl.LEDs), matrix)
+	}
+	d, err := client.Open(*cf.device)
+	if err != nil {
+		return err
+	}
+	name, _ := d.Keyboard()
+	cells, ok := d.Map()
+	if !ok {
+		fmt.Printf("\n%s gives no key matrix: write a map with keybars find -backend openrgb\n", name)
+		return nil
+	}
+	fmt.Println()
+	return qmk.Grid{Cells: cells}.Format(os.Stdout,
+		name+": OpenRGB's LED index for each key, rows top to bottom.",
+		"From its key matrix; save and edit it to use with -map.")
 }
 
 // qmkRaw is where gen fetches keyboard definitions named rather than given

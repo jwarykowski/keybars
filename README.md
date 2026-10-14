@@ -8,9 +8,10 @@ holds a moment and falls like a hi-fi meter.
 
 - Sends only the keys that changed, so it keeps up with the music: about
   30 fps on a Moonlander.
-- Drives keyboards through a small backend interface; today that is ZSA's
-  Keymapp (Moonlander, Voyager), and other per-key RGB keyboards need only
-  a backend and a map.
+- Drives keyboards through a small backend interface: ZSA's Keymapp
+  (Moonlander, Voyager), or [OpenRGB](https://openrgb.org) for most other
+  per-key RGB keyboards (Razer, Corsair, Logitech, SteelSeries, ASUS, QMK
+  and more), whose key layout it reads from OpenRGB with no map to write.
 - Finds the connected keyboard on its own; any other board needs only a text
   map, which `keybars find` helps you write.
 - When the music stops, the keys go back to your layout's colours; the same
@@ -22,9 +23,12 @@ holds a moment and falls like a hi-fi meter.
 
 ## Requirements
 
-- A keyboard with a backend. Supported today: ZSA Moonlander and Voyager
-  through [Keymapp](https://www.zsa.io/flash), running with its **API
-  enabled**
+- A keyboard with a backend:
+  - ZSA Moonlander and Voyager through [Keymapp](https://www.zsa.io/flash),
+    running with its **API enabled**, or
+  - a per-key RGB keyboard OpenRGB supports, with OpenRGB running and its
+    **SDK server started** (`openrgb --server`, or "Start Server" on its SDK
+    Server tab)
 - [cava](https://github.com/karlstav/cava) to listen to the audio
   (`dnf install cava`, `apt install cava`, `brew install cava`; macOS also
   needs a loopback device such as [BlackHole](https://github.com/ExistentialAudio/BlackHole):
@@ -54,6 +58,8 @@ keybars -gain 2              # reach the top more often (default 1.5)
 keybars -peaks=false         # no peak dots
 keybars -reserve 36,61       # never touch these LEDs
 keybars -smooth 15           # jumpier (0-100, default 35)
+keybars -backend openrgb     # the first keyboard OpenRGB has
+keybars -backend openrgb -device apex   # or the one whose name contains apex
 keybars -source 'BlackHole 2ch'   # cava capture device (macOS needs a loopback)
 keybars version              # the installed version
 ```
@@ -144,6 +150,22 @@ ascii format, one frame per line, one height (0 to the bar height) per column:
 printf '1;2;3;4;3;2;1;0;1;2;3;4;\n' | keybars -stdin
 ```
 
+## OpenRGB
+
+With `-backend openrgb`, keybars connects to OpenRGB's SDK server
+(`-openrgb`, default `127.0.0.1:6742`), takes the keyboard into its per-LED
+mode while music plays, and puts its previous mode back afterwards. Keys
+outside the bars keep their colours if the keyboard was already per-LED, and
+go dark otherwise.
+
+Most keyboards in OpenRGB come with a key matrix, which keybars uses as the
+map: the top row (usually Esc and F-keys) is left free by default, like the
+number row on ZSA boards. `keybars maps -backend openrgb` lists the devices
+and prints that map, to save and edit for `-map`. For a keyboard without a
+matrix, `keybars find -backend openrgb` lights LEDs from index 0 with their
+OpenRGB names. The OpenRGB backend is tested against a simulated server, not
+yet a real keyboard, so reports are welcome.
+
 ## macOS audio
 
 macOS gives programs no way to listen to what it plays, so cava listens to a
@@ -175,7 +197,7 @@ If the bars stay dark:
 
 ## Keyboard maps
 
-A map is Keymapp's index for each key, drawn as the keyboard looks: one line
+A map is the backend's index for each key (Keymapp's, or OpenRGB's), drawn as the keyboard looks: one line
 per row of keys, top to bottom. Keymapp numbers each half on its own, row by
 row from the left, inner column included (not the firmware's LED order).
 Columns become bars and rows become levels, so any size works. `-` marks a gap, `|` is decoration, `#` starts a comment.

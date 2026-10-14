@@ -97,3 +97,19 @@ func TestDetect(t *testing.T) {
 		}
 	}
 }
+
+func TestFromCells(t *testing.T) {
+	m, err := FromCells("pad", [][]int{{0, 1, -1}, {}, {2, 3}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Rows() != 2 || m.Columns() != 3 {
+		t.Fatalf("%d rows x %d columns, want 2 x 3", m.Rows(), m.Columns())
+	}
+	if got := m.LEDs(); len(got) != 4 || got[3] != 3 {
+		t.Errorf("LEDs = %v", got)
+	}
+	if _, err := FromCells("empty", nil); err == nil {
+		t.Error("no rows: no error")
+	}
+}

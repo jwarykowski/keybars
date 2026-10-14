@@ -10,6 +10,7 @@ import (
 
 	"github.com/jwarykowski/keybars/pkg/keymapp"
 	"github.com/jwarykowski/keybars/pkg/layout"
+	"github.com/jwarykowski/keybars/pkg/rgb"
 )
 
 // Renderer paints frames onto a keyboard.
@@ -84,6 +85,11 @@ func (r *Renderer) Frame(heights, peaks []int) (int, error) {
 		}
 		r.shown[led] = c
 		sent++
+	}
+	if sent > 0 {
+		if err := rgb.Flush(r.leds); err != nil {
+			return sent, err
+		}
 	}
 	return sent, nil
 }
