@@ -266,4 +266,7 @@ can [sponsor its development](https://github.com/sponsors/jwarykowski).
 
 ## License
 
-MIT
+MIT. The code keybars includes from other projects keeps its own licences,
+listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and printed by
+`keybars licences`; `scripts/notices.sh` regenerates the file after a
+dependency changes.
