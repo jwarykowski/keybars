@@ -163,8 +163,10 @@ map: the top row (usually Esc and F-keys) is left free by default, like the
 number row on ZSA boards. `keybars maps -backend openrgb` lists the devices
 and prints that map, to save and edit for `-map`. For a keyboard without a
 matrix, `keybars find -backend openrgb` lights LEDs from index 0 with their
-OpenRGB names. The OpenRGB backend is tested against a simulated server, not
-yet a real keyboard, so reports are welcome.
+OpenRGB names. When OpenRGB rescans its devices, or the keyboard is
+unplugged and plugged back in, keybars finds it again and carries on. The
+OpenRGB backend is tested against a simulated server, not yet a real
+keyboard, so reports are welcome.
 
 ## macOS audio
 

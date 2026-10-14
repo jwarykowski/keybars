@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -86,17 +87,29 @@ type packet struct {
 	data    []byte
 }
 
-// server is a fake OpenRGB SDK server with one device described by desc. It
-// answers the version handshake (unless silent), the count and the
-// description, and records every other packet. Before each reply it sends a
-// device list update, which clients must skip.
+// fakeServer is an OpenRGB SDK server holding the device descriptions in
+// descs. It answers the version handshake (unless silent), the count and the
+// descriptions, and records every other packet.
+type fakeServer struct {
+	mu    sync.Mutex
+	descs [][]byte
+	conn  net.Conn
+}
+
 func server(t *testing.T, desc []byte, silent bool) (string, <-chan packet) {
+	t.Helper()
+	_, addr, got := fake(t, silent, desc)
+	return addr, got
+}
+
+func fake(t *testing.T, silent bool, descs ...[]byte) (*fakeServer, string, <-chan packet) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { ln.Close() })
+	f := &fakeServer{descs: descs}
 	got := make(chan packet, 100)
 	go func() {
 		conn, err := ln.Accept()
@@ -104,8 +117,12 @@ func server(t *testing.T, desc []byte, silent bool) (string, <-chan packet) {
 			return
 		}
 		defer conn.Close()
+		f.mu.Lock()
+		f.conn = conn
+		f.mu.Unlock()
 		reply := func(id uint32, data []byte) {
-			conn.Write(header(0, 100, 0))
+			f.mu.Lock()
+			defer f.mu.Unlock()
 			conn.Write(append(header(0, id, len(data)), data...))
 		}
 		for {
@@ -118,21 +135,33 @@ func server(t *testing.T, desc []byte, silent bool) (string, <-chan packet) {
 			if _, err := io.ReadFull(conn, p.data); err != nil {
 				return
 			}
+			f.mu.Lock()
+			descs := f.descs
+			f.mu.Unlock()
 			switch p.id {
 			case requestProtocolVersion:
 				if !silent {
 					reply(p.id, u32(4))
 				}
 			case requestControllerCount:
-				reply(p.id, u32(1))
+				reply(p.id, u32(uint32(len(descs))))
 			case requestControllerData:
-				reply(p.id, desc)
+				reply(p.id, descs[p.dev])
 			default:
 				got <- p
 			}
 		}
 	}()
-	return ln.Addr().String(), got
+	return f, ln.Addr().String(), got
+}
+
+// change replaces the device list and announces it, as OpenRGB does after a
+// rescan.
+func (f *fakeServer) change(descs ...[]byte) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.descs = descs
+	f.conn.Write(header(0, deviceListUpdated, 0))
 }
 
 func header(dev, id uint32, n int) []byte {
@@ -295,5 +324,145 @@ func TestOpenErrors(t *testing.T) {
 	defer c.Close()
 	if _, err := c.Open("mouse"); err == nil {
 		t.Error("no device named mouse: no error")
+	}
+}
+
+// renamed is the fixture's description with another name of the same length.
+func renamed(t *testing.T, name string) []byte {
+	t.Helper()
+	b := bytes.Replace(fixture(t, "controller_v1.bin"), []byte("Test Keyboard\x00"), []byte(name+"\x00"), 1)
+	if len(name) != len("Test Keyboard") || bytes.Equal(b, fixture(t, "controller_v1.bin")) {
+		t.Fatalf("rename to %q failed", name)
+	}
+	return b
+}
+
+// waitChanged waits for the client to take the server's device list update.
+func waitChanged(t *testing.T, c *Client) {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); !c.changed.Load(); {
+		if time.Now().After(deadline) {
+			t.Fatal("device list update never arrived")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func quiet(t *testing.T, got <-chan packet) {
+	t.Helper()
+	select {
+	case p := <-got:
+		t.Errorf("unexpected packet %+v", p)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// When OpenRGB's device list changes, the device is found again at its new
+// index, put back in its per-LED mode and sent its whole frame. While it's
+// gone, frames are dropped; when it's back, painting resumes.
+func TestFollowsDeviceListChanges(t *testing.T) {
+	kb, other := fixture(t, "controller_v1.bin"), renamed(t, "Other Keyboar")
+	f, addr, got := fake(t, false, kb)
+	c, err := Dial(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	next(t, got) // client name
+	d, err := c.Open("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	red := rgb.Colour{R: 255}
+	frame := make([]rgb.Colour, 11)
+	d.Set(1, red)
+	d.Flush()
+	frame[1] = red
+	if p := next(t, got); p.id != setCustomMode || p.dev != 0 {
+		t.Fatalf("enter = %+v", p)
+	}
+	next(t, got) // UPDATELEDS
+
+	// moved to index 1
+	f.change(other, kb)
+	waitChanged(t, c)
+	d.Set(2, red)
+	frame[2] = red
+	if err := d.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if p := next(t, got); p.id != setCustomMode || p.dev != 1 {
+		t.Errorf("after the move = %+v, want SETCUSTOMMODE to device 1", p)
+	}
+	if p := next(t, got); p.id != updateLEDs || p.dev != 1 || !bytes.Equal(p.data, encodeColours(frame)) {
+		t.Errorf("after the move = %+v, want the whole frame to device 1", p)
+	}
+
+	// unplugged: nothing is sent, nothing fails
+	f.change(other)
+	waitChanged(t, c)
+	d.Set(3, red)
+	frame[3] = red
+	if err := d.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	quiet(t, got)
+
+	// back at index 0: per-LED again, with everything set meanwhile
+	f.change(kb)
+	waitChanged(t, c)
+	if err := d.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if p := next(t, got); p.id != setCustomMode || p.dev != 0 {
+		t.Errorf("on return = %+v, want SETCUSTOMMODE to device 0", p)
+	}
+	if p := next(t, got); p.id != updateLEDs || p.dev != 0 || !bytes.Equal(p.data, encodeColours(frame)) {
+		t.Errorf("on return = %+v, want the whole frame to device 0", p)
+	}
+	if err := d.RestoreAll(); err != nil {
+		t.Fatal(err)
+	}
+	if p := next(t, got); p.id != updateMode || p.dev != 0 {
+		t.Errorf("restore = %+v, want UPDATEMODE to device 0", p)
+	}
+	quiet(t, got)
+}
+
+func TestSame(t *testing.T) {
+	ctl := Controller{Name: "K", Serial: "S1", Location: "HID: 1", LEDs: make([]string, 3)}
+	for name, tc := range map[string]struct {
+		ctls []Controller
+		want int
+	}{
+		"exact":             {[]Controller{{Name: "M"}, ctl}, 1},
+		"replugged":         {[]Controller{{Name: "K", Serial: "S1", Location: "HID: 7", LEDs: make([]string, 3)}}, 0},
+		"twin by serial":    {[]Controller{{Name: "K", Serial: "S2", Location: "HID: 1", LEDs: make([]string, 3)}, {Name: "K", Serial: "S1", Location: "HID: 9", LEDs: make([]string, 3)}}, 1},
+		"two unknown twins": {[]Controller{{Name: "K", Serial: "S8", LEDs: make([]string, 3)}, {Name: "K", Serial: "S9", LEDs: make([]string, 3)}}, -1},
+		"other LED count":   {[]Controller{{Name: "K", Serial: "S1", Location: "HID: 1", LEDs: make([]string, 4)}}, -1},
+		"gone":              {[]Controller{{Name: "M"}}, -1},
+	} {
+		if got := same(tc.ctls, ctl); got != tc.want {
+			t.Errorf("%s: same = %d, want %d", name, got, tc.want)
+		}
+	}
+}
+
+// Replies that arrive too late for their request don't answer the next one.
+func TestLateReplyIsDropped(t *testing.T) {
+	c := &Client{replies: make(chan reply, 8)}
+	c.replies <- reply{id: requestControllerCount, data: u32(9)}
+	client, srv := net.Pipe()
+	defer client.Close()
+	c.conn, c.done = client, make(chan struct{})
+	go c.read()
+	go func() {
+		var h [16]byte
+		io.ReadFull(srv, h[:])
+		srv.Write(append(header(0, requestControllerCount, 4), u32(1)...))
+	}()
+	data, err := c.request(0, requestControllerCount, nil, time.Second)
+	if err != nil || binary.LittleEndian.Uint32(data) != 1 {
+		t.Fatalf("got %v, %v; want the fresh reply, 1", data, err)
 	}
 }
