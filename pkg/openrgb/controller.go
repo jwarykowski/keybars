@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jwarykowski/keybars/internal/rgb"
+	"github.com/jwarykowski/keybars/pkg/rgb"
 )
 
 // Controller is an OpenRGB device's description.

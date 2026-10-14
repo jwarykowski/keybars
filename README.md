@@ -1,7 +1,4 @@
-<table>
-<tr>
-<td width="200" valign="top"><img src="assets/keybars.png" alt="keybars" width="180"></td>
-<td valign="top">
+<p align="center"><img src="assets/keybars.svg" alt="keybars" width="120"></p>
 
 # keybars
 
@@ -34,19 +31,24 @@ holds a moment and falls like a hi-fi meter.
     Server tab)
 - [cava](https://github.com/karlstav/cava) to listen to the audio
   (`dnf install cava`, `apt install cava`, `brew install cava`; macOS also
-  needs a loopback device such as [BlackHole](https://github.com/ExistentialAudio/BlackHole))
-- Go 1.25+ to build
+  needs a loopback device such as [BlackHole](https://github.com/ExistentialAudio/BlackHole):
+  see [macOS audio](#macos-audio))
+- Go 1.25+ to build from source
 
 ## Install
 
 ```sh
-go install github.com/jwarykowski/keybars@latest
+brew install jwarykowski/tap/keybars    # macOS or Linux; brings cava too
+go install github.com/jwarykowski/keybars@latest   # or from source
 ```
+
+Releases also have binaries for macOS and Linux on
+[GitHub](https://github.com/jwarykowski/keybars/releases).
 
 ## Usage
 
 ```sh
-keybars                      # the connected keyboard, bars 4 rows high
+keybars                      # the connected keyboard, bars up to the number row
 keybars -model voyager       # pick a built-in map
 keybars -map my-board.txt    # or your own
 keybars gen zsa/voyager      # write a map from QMK's definition
@@ -58,9 +60,88 @@ keybars -reserve 36,61       # never touch these LEDs
 keybars -smooth 15           # jumpier (0-100, default 35)
 keybars -backend openrgb     # the first keyboard OpenRGB has
 keybars -backend openrgb -device apex   # or the one whose name contains apex
+keybars -source 'BlackHole 2ch'   # cava capture device (macOS needs a loopback)
+keybars version              # the installed version
 ```
 
 Stop it with Ctrl-C. `-v` prints the frame rate on exit.
+
+### Config file
+
+`keybars` and `keybars start` read their settings from
+`~/.config/keybars/config` (`$XDG_CONFIG_HOME/keybars/config` when that is
+set), one flag per line by its own name. Flags on the command line override
+it, and `-config FILE` reads another file.
+
+```
+# ~/.config/keybars/config
+source = BlackHole 2ch
+colours = #00ff00,#ffff00,#ff0000
+gain = 2
+peaks = false
+```
+
+Lines starting with `#` are comments; a `#` later in a line is part of the
+value, as in the colours. An unknown setting stops keybars with its line
+number.
+
+### Running in the background
+
+```sh
+keybars start                # run in the background with the config file's settings
+keybars start -gain 3        # flags work here too
+keybars status               # running or not, and where the log is
+keybars stop                 # hand the keys back to the layout and exit
+```
+
+`start` keeps a pid file and log in `~/.local/state/keybars/`
+(`$XDG_STATE_HOME/keybars/`). If keybars fails straight away, say Keymapp
+isn't running, `start` prints the error instead.
+
+To start it at login on macOS, save this as
+`~/Library/LaunchAgents/dev.jwarykowski.keybars.plist`, with the path to your
+keybars:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.jwarykowski.keybars</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/you/go/bin/keybars</string></array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardErrorPath</key><string>/tmp/keybars.log</string>
+</dict>
+</plist>
+```
+
+Load it with `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.jwarykowski.keybars.plist`.
+keybars exits when Keymapp or the keyboard goes away, and `KeepAlive` starts
+it again every 10 seconds until they're back, so set Keymapp to open at login
+too. `PATH` is there so launchd finds cava.
+
+On Linux, a systemd user unit does the same, in
+`~/.config/systemd/user/keybars.service`:
+
+```ini
+[Unit]
+Description=keybars
+
+[Service]
+ExecStart=%h/go/bin/keybars
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+```
+
+Then `systemctl --user enable --now keybars`.
 
 Any program can drive the bars instead of cava: `-stdin` reads cava's raw
 ascii format, one frame per line, one height (0 to the bar height) per column:
@@ -85,6 +166,35 @@ matrix, `keybars find -backend openrgb` lights LEDs from index 0 with their
 OpenRGB names. The OpenRGB backend is tested against a simulated server, not
 yet a real keyboard, so reports are welcome.
 
+## macOS audio
+
+macOS gives programs no way to listen to what it plays, so cava listens to a
+loopback device instead:
+
+1. Install [BlackHole](https://github.com/ExistentialAudio/BlackHole)
+   (`brew install blackhole-2ch`).
+2. In Audio MIDI Setup, add a Multi-Output Device with **BlackHole 2ch** and
+   your speakers or headphones. Make the speakers or headphones the primary
+   device and tick Drift Correction for BlackHole.
+3. Choose the Multi-Output Device as the sound output (Control Centre >
+   Sound). Connecting Bluetooth headphones switches the output back to them,
+   so pick it again after. The volume keys don't work on a Multi-Output
+   Device; use the headphones' or speakers' own.
+4. Run `keybars -source 'BlackHole 2ch'`, or put `source = BlackHole 2ch` in
+   the config file.
+
+If the bars stay dark:
+
+- `keybars test` lights the keys without audio, so it shows whether Keymapp
+  is the problem.
+- macOS counts listening to BlackHole as using the microphone. Allow your
+  terminal (or keybars, under launchd) in System Settings > Privacy &
+  Security > Microphone; without it cava hears silence and says nothing.
+- In QuickTime, File > New Audio Recording with BlackHole 2ch as the input
+  shows whether sound reaches BlackHole at all.
+- A cava config with `method = portaudio` and `source = list` under
+  `[input]` lists the devices cava can see, by the names `-source` takes.
+
 ## Keyboard maps
 
 A map is the backend's index for each key (Keymapp's, or OpenRGB's), drawn as the keyboard looks: one line
@@ -102,9 +212,8 @@ Columns become bars and rows become levels, so any size works. `-` marks a gap, 
 ```
 
 `keybars maps` lists the built-in maps and which one the connected keyboard
-uses (matched on the name Keymapp reports). The Moonlander map is tested on
-a real board, and `keybars gen` reproduces it from QMK; the Voyager map is
-generated the same way but untested on a board, so corrections are welcome.
+uses (matched on the name Keymapp reports). The Moonlander and Voyager maps
+are tested on real boards, and `keybars gen` reproduces both from QMK.
 
 ### Adding a keyboard
 
@@ -143,15 +252,16 @@ go test ./...
 go vet ./...
 ```
 
+Pushing a `v*` tag runs GoReleaser (`.goreleaser.yaml`): it builds the
+binaries, publishes the GitHub release and opens a pull request on
+[jwarykowski/homebrew-tap](https://github.com/jwarykowski/homebrew-tap) with
+the formula. It needs a `GH_RELEASE_TOKEN` secret with write access to the tap.
+
 ## Support
 
 keybars is free and MIT licensed. If it makes your desk a bit more fun, you
 can [sponsor its development](https://github.com/sponsors/jwarykowski).
 
 ## License
-
-</td>
-</tr>
-</table>
 
 MIT

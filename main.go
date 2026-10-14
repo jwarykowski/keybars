@@ -7,7 +7,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,20 +22,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jwarykowski/keybars/internal/bars"
-	"github.com/jwarykowski/keybars/internal/keymapp"
-	"github.com/jwarykowski/keybars/internal/layout"
-	"github.com/jwarykowski/keybars/internal/openrgb"
-	"github.com/jwarykowski/keybars/internal/qmk"
-	"github.com/jwarykowski/keybars/internal/rgb"
-	"github.com/jwarykowski/keybars/internal/source"
+	builtin "github.com/jwarykowski/keybars/maps"
+	"github.com/jwarykowski/keybars/pkg/bars"
+	"github.com/jwarykowski/keybars/pkg/keymapp"
+	"github.com/jwarykowski/keybars/pkg/layout"
+	"github.com/jwarykowski/keybars/pkg/openrgb"
+	"github.com/jwarykowski/keybars/pkg/qmk"
+	"github.com/jwarykowski/keybars/pkg/rgb"
+	"github.com/jwarykowski/keybars/pkg/source"
 )
 
-//go:embed maps/*.txt
-var embedded embed.FS
-
-// maps holds the built-in keyboard maps, maps/<model>.txt.
-var maps, _ = fs.Sub(embedded, "maps")
+// maps holds the built-in keyboard maps, <model>.txt.
+var maps fs.FS = builtin.FS
 
 const usage = `keybars: a music equaliser on your keyboard's backlight
 
@@ -46,14 +43,20 @@ usage:
   keybars find [flags]    light LEDs one at a time to write a map
   keybars gen KEYBOARD    write a map from QMK's definition of a keyboard
   keybars maps            list the built-in maps and the connected keyboard
+  keybars start [flags]   run in the background
+  keybars stop            stop the background keybars
+  keybars status          show whether keybars is running in the background
+  keybars version         print the version
 
-Run a command with -h for its flags.
+Run a command with -h for its flags. keybars and keybars start read their
+settings from ~/.config/keybars/config, one flag per line ("gain = 2");
+flags on the command line override it.
 `
 
 func main() {
 	cmd, args := "run", os.Args[1:]
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		cmd, args = args[0], args[1:]
+	if len(args) > 0 && (!strings.HasPrefix(args[0], "-") || args[0] == "-version" || args[0] == "--version") {
+		cmd, args = strings.TrimLeft(args[0], "-"), args[1:]
 	}
 	var err error
 	switch cmd {
@@ -67,6 +70,14 @@ func main() {
 		err = gen(args)
 	case "maps":
 		err = listMaps(args)
+	case "start":
+		err = start(args)
+	case "stop":
+		err = stop()
+	case "status":
+		err = status()
+	case "version":
+		fmt.Println("keybars", version())
 	case "help":
 		fmt.Print(usage)
 	default:
@@ -193,6 +204,7 @@ func run(args []string) error {
 	reserve := fl.String("reserve", "", "comma-separated LEDs never to touch")
 	fps := fl.Int("fps", 30, "frames per second asked of cava")
 	smooth := fl.Int("smooth", 35, "cava smoothing, 0-100: lower is jumpier, higher is smoother")
+	cavaSource := fl.String("source", "", "cava capture device (e.g. \"BlackHole 2ch\" on macOS); empty = cava's default")
 	idle := fl.Duration("idle", time.Second, "silence before the keys go back to the layout")
 	refresh := fl.Duration("refresh", 2*time.Second, "resend every key this often, in case something reset the board")
 	stdin := fl.Bool("stdin", false, "read frames (cava raw ascii, \"3;5;1;...\") from stdin instead of running cava")
@@ -201,6 +213,10 @@ func run(args []string) error {
 	peakHold := fl.Duration("peak-hold", 400*time.Millisecond, "how long a peak dot holds before falling")
 	peakFall := fl.Float64("peak-fall", 6, "how fast peak dots fall, in rows per second")
 	verbose := fl.Bool("v", false, "print frames painted and LEDs sent on exit")
+	fl.String("config", "", "settings file (default: ~/.config/keybars/config)")
+	if err := loadConfig(fl, args); err != nil {
+		return err
+	}
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
@@ -258,7 +274,7 @@ func run(args []string) error {
 		if *stdin {
 			srcErr <- source.Read(os.Stdin, frames)
 		} else {
-			srcErr <- source.Cava(ctx, grid.Columns(), grid.Height*fine, *fps, *smooth, raw)
+			srcErr <- source.Cava(ctx, grid.Columns(), grid.Height*fine, *fps, *smooth, *cavaSource, raw)
 		}
 	}()
 	if !*stdin {
