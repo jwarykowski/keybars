@@ -3,6 +3,8 @@
 # module linked into the release binaries, on each platform they're built for.
 # CI runs it and fails if the file it writes differs from the committed one.
 set -euo pipefail
+# byte order, so every machine sorts modules the same way
+export LC_ALL=C
 
 cd "$(dirname "$0")/.."
 
