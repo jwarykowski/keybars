@@ -43,7 +43,11 @@ changelog:
       - "^docs:"
       - "^chore:"
 
+# named, since origin is Forgejo: releases stay on GitHub's copy
 release:
+  github:
+    owner: jwarykowski
+    name: keybars
   name_template: "keybars {{ .Version }}"
 
 brews:

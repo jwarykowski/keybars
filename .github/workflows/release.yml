@@ -3,6 +3,8 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # a manual run builds everything but publishes nothing
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -17,12 +19,23 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # the release goes on GitHub's copy, which gets the tag from Forgejo's
+      # push mirror; publishing first would make GitHub create its own tag
+      - name: wait for the tag on GitHub
+        if: github.event_name == 'push'
+        run: |
+          for _ in $(seq 1 30); do
+            git ls-remote --exit-code --tags https://github.com/jwarykowski/keybars.git "refs/tags/$GITHUB_REF_NAME" >/dev/null && exit 0
+            sleep 10
+          done
+          echo "$GITHUB_REF_NAME didn't reach GitHub in 5 minutes; check the push mirror" >&2
+          exit 1
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: ${{ github.event_name == 'workflow_dispatch' && 'release --snapshot --clean --skip=publish' || 'release --clean' }}
         env:
-          # the release goes here; the formula pull request goes to the tap
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # the release goes on GitHub's copy; the formula pull request goes to the tap
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
           GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
