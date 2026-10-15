@@ -123,7 +123,7 @@ func fake(t *testing.T, silent bool, descs ...[]byte) (*fakeServer, string, <-ch
 		reply := func(id uint32, data []byte) {
 			f.mu.Lock()
 			defer f.mu.Unlock()
-			conn.Write(append(header(0, id, len(data)), data...))
+			_, _ = conn.Write(append(header(0, id, len(data)), data...)) // the client under test reports failures
 		}
 		for {
 			var h [16]byte
@@ -161,7 +161,7 @@ func (f *fakeServer) change(descs ...[]byte) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.descs = descs
-	f.conn.Write(header(0, deviceListUpdated, 0))
+	_, _ = f.conn.Write(header(0, deviceListUpdated, 0)) // the client under test reports failures
 }
 
 func header(dev, id uint32, n int) []byte {
@@ -239,7 +239,9 @@ func TestSession(t *testing.T) {
 		t.Errorf("restore = %+v, want UPDATEMODE of mode 2", p)
 	}
 	// Back in direct mode on the next Set.
-	d.Set(0, red)
+	if err := d.Set(0, red); err != nil {
+		t.Fatal(err)
+	}
 	if p := next(t, got); p.id != setCustomMode {
 		t.Errorf("after restore = %+v, want SETCUSTOMMODE", p)
 	}
@@ -276,7 +278,9 @@ func TestSessionFromDirect(t *testing.T) {
 		t.Fatal(err)
 	}
 	blue := rgb.Colour{B: 255}
-	d.Set(1, blue)
+	if err := d.Set(1, blue); err != nil {
+		t.Fatal(err)
+	}
 	d.Flush()
 	next(t, got) // SETCUSTOMMODE
 	want := append([]rgb.Colour(nil), ctl.Colours...)
@@ -284,7 +288,9 @@ func TestSessionFromDirect(t *testing.T) {
 	if p := next(t, got); !bytes.Equal(p.data, encodeColours(want)) {
 		t.Errorf("flush kept no colours: %x", p.data)
 	}
-	d.RestoreAll()
+	if err := d.RestoreAll(); err != nil {
+		t.Fatal(err)
+	}
 	if p := next(t, got); p.id != updateMode || !bytes.Equal(p.data, encodeMode(0, ctl.Modes[0])) {
 		t.Errorf("restore mode = %+v", p)
 	}
@@ -375,7 +381,9 @@ func TestFollowsDeviceListChanges(t *testing.T) {
 	}
 	red := rgb.Colour{R: 255}
 	frame := make([]rgb.Colour, 11)
-	d.Set(1, red)
+	if err := d.Set(1, red); err != nil {
+		t.Fatal(err)
+	}
 	d.Flush()
 	frame[1] = red
 	if p := next(t, got); p.id != setCustomMode || p.dev != 0 {
@@ -386,7 +394,9 @@ func TestFollowsDeviceListChanges(t *testing.T) {
 	// moved to index 1
 	f.change(other, kb)
 	waitChanged(t, c)
-	d.Set(2, red)
+	if err := d.Set(2, red); err != nil {
+		t.Fatal(err)
+	}
 	frame[2] = red
 	if err := d.Flush(); err != nil {
 		t.Fatal(err)
@@ -401,7 +411,9 @@ func TestFollowsDeviceListChanges(t *testing.T) {
 	// unplugged: nothing is sent, nothing fails
 	f.change(other)
 	waitChanged(t, c)
-	d.Set(3, red)
+	if err := d.Set(3, red); err != nil {
+		t.Fatal(err)
+	}
 	frame[3] = red
 	if err := d.Flush(); err != nil {
 		t.Fatal(err)
@@ -458,8 +470,10 @@ func TestLateReplyIsDropped(t *testing.T) {
 	go c.read()
 	go func() {
 		var h [16]byte
-		io.ReadFull(srv, h[:])
-		srv.Write(append(header(0, requestControllerCount, 4), u32(1)...))
+		if _, err := io.ReadFull(srv, h[:]); err != nil {
+			return
+		}
+		_, _ = srv.Write(append(header(0, requestControllerCount, 4), u32(1)...))
 	}()
 	data, err := c.request(0, requestControllerCount, nil, time.Second)
 	if err != nil || binary.LittleEndian.Uint32(data) != 1 {

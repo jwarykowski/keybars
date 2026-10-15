@@ -21,6 +21,7 @@ package qmk
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -32,6 +33,7 @@ import (
 // Order is how keys are numbered in the map.
 type Order int
 
+// The orders a map can number keys in: Keymapp's, or the firmware's LEDs.
 const (
 	Keymapp Order = iota
 	Firmware
@@ -82,7 +84,7 @@ func Parse(r io.Reader) (Keyboard, error) {
 		return Keyboard{}, fmt.Errorf("keyboard.json: %w", err)
 	}
 	if len(kb.Layouts) == 0 {
-		return Keyboard{}, fmt.Errorf("keyboard.json has no layouts (it may inherit them from a parent info.json)")
+		return Keyboard{}, errors.New("keyboard.json has no layouts (it may inherit them from a parent info.json)")
 	}
 	return kb, nil
 }
@@ -157,7 +159,7 @@ func (kb Keyboard) Map(o Options) (Grid, error) {
 				continue
 			}
 			led, ok := index[c[r].Matrix]
-			if ok && !(o.Order == Keymapp && led == 0) {
+			if ok && (o.Order != Keymapp || led != 0) {
 				g.Cells[r][x] = led
 			}
 		}

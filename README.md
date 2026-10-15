@@ -253,6 +253,7 @@ Otherwise, find the indices by hand:
 ```sh
 go test ./...
 go vet ./...
+golangci-lint run ./...   # .golangci.yml; golangci-lint fmt ./... formats
 ```
 
 Pushing a `v*` tag runs GoReleaser (`.goreleaser.yaml`): it builds the

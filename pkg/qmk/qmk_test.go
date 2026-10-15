@@ -25,10 +25,10 @@ func load(t *testing.T, name string) Keyboard {
 // tokens is a map's keys row by row, ignoring comments, spacing and "|".
 func tokens(s string) string {
 	var rows []string
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		line, _, _ = strings.Cut(line, "#")
 		var f []string
-		for _, t := range strings.Fields(line) {
+		for t := range strings.FieldsSeq(line) {
 			if t != "|" {
 				f = append(f, t)
 			}
@@ -72,12 +72,12 @@ func TestFirmwareOrder(t *testing.T) {
 	// The Moonlander's LEDs run down each column: the top row is every
 	// fifth LED.
 	got := tokens(generate(t, "moonlander", Options{Order: Firmware}))
-	if top := strings.Split(got, "\n")[0]; top != "0 5 10 15 20 25 61 56 51 46 41 36" {
+	if top, _, _ := strings.Cut(got, "\n"); top != "0 5 10 15 20 25 61 56 51 46 41 36" {
 		t.Errorf("moonlander firmware top row = %q", top)
 	}
 	// The Voyager's LEDs are already in Keymapp's order, 0 included.
 	v := tokens(generate(t, "voyager", Options{Order: Firmware}))
-	if top := strings.Split(v, "\n")[0]; top != "0 1 2 3 4 5 26 27 28 29 30 31" {
+	if top, _, _ := strings.Cut(v, "\n"); top != "0 1 2 3 4 5 26 27 28 29 30 31" {
 		t.Errorf("voyager firmware top row = %q", top)
 	}
 }
@@ -108,7 +108,9 @@ func TestOnePieceBoard(t *testing.T) {
 		t.Fatal(err)
 	}
 	var b bytes.Buffer
-	g.Format(&b)
+	if err := g.Format(&b); err != nil {
+		t.Fatal(err)
+	}
 	if got := b.String(); got != " -  1\n 2  3\n" {
 		t.Errorf("one-piece map = %q", got)
 	}

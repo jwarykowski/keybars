@@ -4,5 +4,7 @@ package maps
 
 import "embed"
 
+// FS holds the built-in keyboard maps, one <model>.txt each.
+//
 //go:embed *.txt
 var FS embed.FS

@@ -186,6 +186,6 @@ func fields(vs ...int) []byte {
 // raw passes pre-encoded protobuf bytes through gRPC.
 type raw struct{}
 
-func (raw) Marshal(v any) ([]byte, error)   { return *(v.(*[]byte)), nil }
-func (raw) Unmarshal(b []byte, v any) error { *(v.(*[]byte)) = append([]byte(nil), b...); return nil }
+func (raw) Marshal(v any) ([]byte, error)   { return *v.(*[]byte), nil }
+func (raw) Unmarshal(b []byte, v any) error { *v.(*[]byte) = append([]byte(nil), b...); return nil }
 func (raw) Name() string                    { return "proto" }

@@ -37,7 +37,7 @@ func Parse(name string, r io.Reader) (Map, error) {
 	for n := 1; sc.Scan(); n++ {
 		line, _, _ := strings.Cut(sc.Text(), "#")
 		var row []int
-		for _, f := range strings.Fields(line) {
+		for f := range strings.FieldsSeq(line) {
 			switch f {
 			case "|":
 				continue

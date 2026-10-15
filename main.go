@@ -229,7 +229,7 @@ func run(args []string) error {
 		return err
 	}
 	var reserved []int
-	for _, s := range strings.Split(*reserve, ",") {
+	for s := range strings.SplitSeq(*reserve, ",") {
 		if s = strings.TrimSpace(s); s == "" {
 			continue
 		}
@@ -306,7 +306,7 @@ func run(args []string) error {
 		default:
 		}
 	}
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		err = nil
 	}
 	return err
@@ -438,7 +438,7 @@ func test(args []string) error {
 	}
 	cs, _ := bars.ParseColours("#00ff00,#ffff00,#ff0000")
 	r := bars.New(grid, client, cs, nil)
-	defer r.Clear()
+	defer func() { _ = r.Clear() }() // best effort on the way out
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -454,7 +454,7 @@ func test(args []string) error {
 		}
 	}
 	fmt.Printf("%s: %d columns x %d rows; columns left to right, then rows bottom up\n", m.Name, m.Columns(), m.Rows())
-	for x := 0; x < grid.Columns(); x++ {
+	for x := range grid.Columns() {
 		h := make([]int, grid.Columns())
 		h[x] = grid.Height
 		if !show(h) {
@@ -512,7 +512,7 @@ func find(args []string) error {
 	if err := client.SetAll(rgb.Colour{}); err != nil {
 		return err
 	}
-	defer client.RestoreAll()
+	defer func() { _ = client.RestoreAll() }() // best effort on the way out
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
