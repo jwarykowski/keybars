@@ -68,6 +68,10 @@ func loadConfig(fl *flag.FlagSet, args []string) error {
 	return applyConfig(fl, path, f)
 }
 
+// proOnly are keybars Pro's settings, which share this file; keybars skips
+// them rather than stopping, so one file serves both.
+var proOnly = map[string]bool{"low-hz": true, "high-hz": true, "brightness": true, "symmetry": true}
+
 // applyConfig reads "name = value" lines, one flag each by its own name; #
 // starts a comment line and quotes around a value are dropped.
 func applyConfig(fl *flag.FlagSet, name string, r io.Reader) error {
@@ -81,6 +85,9 @@ func applyConfig(fl *flag.FlagSet, name string, r io.Reader) error {
 		key, value = strings.TrimSpace(key), unquote(strings.TrimSpace(value))
 		if !ok || key == "" {
 			return fmt.Errorf("%s:%d: want name = value, got %q", name, n, line)
+		}
+		if proOnly[key] && fl.Lookup(key) == nil {
+			continue
 		}
 		if key == "config" || fl.Lookup(key) == nil {
 			return fmt.Errorf("%s:%d: unknown setting %q", name, n, key)

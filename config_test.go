@@ -37,6 +37,17 @@ idle = "3s"
 	}
 }
 
+func TestApplyConfigSkipsPro(t *testing.T) {
+	fl, _, gain, _, _ := testFlags()
+	cfg := "low-hz = 40\nhigh-hz = 16000\nbrightness = 80\nsymmetry = centre\ngain = 3\n"
+	if err := applyConfig(fl, "config", strings.NewReader(cfg)); err != nil {
+		t.Fatal(err)
+	}
+	if *gain != 3 {
+		t.Errorf("gain %v", *gain)
+	}
+}
+
 func TestApplyConfigErrors(t *testing.T) {
 	for cfg, want := range map[string]string{
 		"gain = 2\nvolume = 11\n": `config:2: unknown setting "volume"`,

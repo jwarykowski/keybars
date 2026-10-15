@@ -83,7 +83,8 @@ peaks = false
 
 Lines starting with `#` are comments; a `#` later in a line is part of the
 value, as in the colours. An unknown setting stops keybars with its line
-number.
+number, except keybars Pro's own (`low-hz`, `high-hz`, `brightness`,
+`symmetry`), which it skips so the same file works in both.
 
 ### Running in the background
 
