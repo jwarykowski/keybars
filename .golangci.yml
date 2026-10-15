@@ -19,7 +19,9 @@ linters:
     - wastedassign
   settings:
     misspell:
-      locale: UK # Australian English in comments and messages
+      locale: UK # Australian English in comments
+      mode: restricted # comments only: code keeps names like lipgloss.Color and NO_COLOR
+      ignore-rules: [serialize, normalize, color] # Go names that doc comments must spell as declared
     revive:
       rules:
         - name: exported
