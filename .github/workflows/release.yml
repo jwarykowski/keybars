@@ -3,8 +3,13 @@ name: release
 on:
   push:
     tags: ["v*"]
-  # a manual run builds everything but publishes nothing
+  # a manual run with a tag releases that tag again, using this workflow;
+  # without one it builds everything but publishes nothing
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to release (blank for a snapshot that publishes nothing)
+        default: ""
 
 permissions:
   contents: write
@@ -12,30 +17,51 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      PUBLISH: ${{ github.event_name == 'push' || inputs.tag != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # a 401 later is far less clear than failing here
+      - name: check the GitHub token
+        if: env.PUBLISH == 'true'
+        run: GH_TOKEN="$GH_RELEASE_TOKEN" gh api user --jq '"publishing as " + .login'
+        env:
+          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
       # the release goes on GitHub's copy, which gets the tag from Forgejo's
       # push mirror; publishing first would make GitHub create its own tag
       - name: wait for the tag on GitHub
-        if: github.event_name == 'push'
+        if: env.PUBLISH == 'true'
         run: |
           for _ in $(seq 1 30); do
-            git ls-remote --exit-code --tags https://github.com/jwarykowski/keybars.git "refs/tags/$GITHUB_REF_NAME" >/dev/null && exit 0
+            git ls-remote --exit-code --tags https://github.com/jwarykowski/keybars.git "refs/tags/$TAG" >/dev/null && exit 0
             sleep 10
           done
-          echo "$GITHUB_REF_NAME didn't reach GitHub in 5 minutes; check the push mirror" >&2
+          echo "$TAG didn't reach GitHub in 5 minutes; check the push mirror" >&2
           exit 1
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: ${{ github.event_name == 'workflow_dispatch' && 'release --snapshot --clean --skip=publish' || 'release --clean' }}
+          install-only: true
+      # GoReleaser reads the GitHub token from its file, since the runner's
+      # own GITHUB_TOKEN (Forgejo's) would otherwise win
+      - name: release
+        run: |
+          mkdir -p ~/.config/goreleaser
+          printf '%s' "$GH_RELEASE_TOKEN" > ~/.config/goreleaser/github_token
+          unset GITHUB_TOKEN
+          if [ "$PUBLISH" = true ]; then
+            goreleaser release --clean
+          else
+            goreleaser release --snapshot --clean --skip=publish
+          fi
         env:
           # the release goes on GitHub's copy; the formula pull request goes to the tap
-          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
           GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
