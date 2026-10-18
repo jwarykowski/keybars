@@ -79,11 +79,11 @@ func start(args []string) error {
 	}
 	pidFile := filepath.Join(dir, "keybars.pid")
 	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)+"\n"), 0o644); err != nil {
-		cmd.Process.Kill()
+		_ = cmd.Process.Kill() // the pid file error is the one to report
 		return err
 	}
 	exited := make(chan struct{})
-	go func() { cmd.Wait(); close(exited) }()
+	go func() { _ = cmd.Wait(); close(exited) }() // only whether it exits matters here
 	select {
 	case <-exited:
 		os.Remove(pidFile)

@@ -7,6 +7,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -193,6 +194,12 @@ func openrgbMap(d *openrgb.Device) (layout.Map, error) {
 	name, _ := d.Keyboard()
 	cells, ok := d.Map()
 	if !ok {
+		// QMK's map for the board, in the firmware's LED order, which is
+		// OpenRGB's for a QMK board that talks to it directly
+		if b, ok := builtin.MatchQMK(name); ok {
+			fmt.Fprintf(os.Stderr, "keybars: OpenRGB gives no key matrix for %s; using the map from QMK (untested on this board: keybars test checks it)\n", name)
+			return layout.Load(builtin.QMK, b.ID)
+		}
 		return layout.Map{}, fmt.Errorf("OpenRGB gives no key matrix for %s: write a map with `keybars find -backend openrgb` and pass -map FILE", name)
 	}
 	return layout.FromCells(name, cells)
@@ -229,7 +236,7 @@ func run(args []string) error {
 		return err
 	}
 	var reserved []int
-	for _, s := range strings.Split(*reserve, ",") {
+	for s := range strings.SplitSeq(*reserve, ",") {
 		if s = strings.TrimSpace(s); s == "" {
 			continue
 		}
@@ -306,7 +313,7 @@ func run(args []string) error {
 		default:
 		}
 	}
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		err = nil
 	}
 	return err
@@ -438,7 +445,7 @@ func test(args []string) error {
 	}
 	cs, _ := bars.ParseColours("#00ff00,#ffff00,#ff0000")
 	r := bars.New(grid, client, cs, nil)
-	defer r.Clear()
+	defer func() { _ = r.Clear() }() // best effort on the way out
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -454,7 +461,7 @@ func test(args []string) error {
 		}
 	}
 	fmt.Printf("%s: %d columns x %d rows; columns left to right, then rows bottom up\n", m.Name, m.Columns(), m.Rows())
-	for x := 0; x < grid.Columns(); x++ {
+	for x := range grid.Columns() {
 		h := make([]int, grid.Columns())
 		h[x] = grid.Height
 		if !show(h) {
@@ -512,7 +519,7 @@ func find(args []string) error {
 	if err := client.SetAll(rgb.Colour{}); err != nil {
 		return err
 	}
-	defer client.RestoreAll()
+	defer func() { _ = client.RestoreAll() }() // best effort on the way out
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -616,7 +623,10 @@ func listOpenRGB(cf conn) error {
 
 // qmkRaw is where gen fetches keyboard definitions named rather than given
 // as a file.
-const qmkRaw = "https://raw.githubusercontent.com/qmk/qmk_firmware/master/keyboards/"
+const (
+	qmkAPI = "https://keyboards.qmk.fm/v1/keyboards/"
+	qmkRaw = "https://raw.githubusercontent.com/qmk/qmk_firmware/master/keyboards/"
+)
 
 // gen writes a map from a QMK keyboard.json: a file, or a keyboard's path in
 // qmk_firmware (zsa/voyager) to fetch.
@@ -625,6 +635,7 @@ func gen(args []string) error {
 	order := fl.String("order", "keymapp", "key numbering: keymapp (its API index) or firmware (QMK's rgb_matrix index)")
 	name := fl.String("layout", "", "QMK layout (default: LAYOUT, else the first)")
 	inner := fl.Bool("inner", false, "keep a split half's short inner column")
+	shape := fl.Bool("json", false, "print the board's shape as JSON (each key's place and size, and where the map puts it), not the map")
 	fl.Usage = func() {
 		fmt.Fprintln(fl.Output(), "usage: keybars gen [flags] KEYBOARD\n\nKEYBOARD is a QMK keyboard.json, or a keyboard's path in qmk_firmware/keyboards (zsa/voyager) to fetch.")
 		fl.PrintDefaults()
@@ -645,7 +656,17 @@ func gen(args []string) error {
 	if err != nil {
 		return err
 	}
-	g, err := kb.Map(qmk.Options{Order: o, Layout: *name, Inner: *inner})
+	opts := qmk.Options{Order: o, Layout: *name, Inner: *inner}
+	if *shape {
+		sh, err := kb.Shape(opts)
+		if err != nil {
+			return err
+		}
+		e := json.NewEncoder(os.Stdout)
+		e.SetIndent("", " ")
+		return e.Encode(sh)
+	}
+	g, err := kb.Map(opts)
 	if err != nil {
 		return err
 	}
@@ -665,8 +686,13 @@ func readQMK(src string) (qmk.Keyboard, error) {
 		return qmk.Parse(f)
 	}
 	var errs []error
+	// QMK's API has the merged definition, which variants inherit; the raw
+	// files are a fallback
+	urls := []string{qmkAPI + strings.Trim(src, "/") + "/info.json"}
 	for _, file := range []string{"keyboard.json", "info.json"} {
-		url := qmkRaw + strings.Trim(src, "/") + "/" + file
+		urls = append(urls, qmkRaw+strings.Trim(src, "/")+"/"+file)
+	}
+	for _, url := range urls {
 		resp, err := http.Get(url)
 		if err != nil {
 			return qmk.Keyboard{}, err

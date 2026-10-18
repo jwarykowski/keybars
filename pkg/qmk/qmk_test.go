@@ -25,10 +25,10 @@ func load(t *testing.T, name string) Keyboard {
 // tokens is a map's keys row by row, ignoring comments, spacing and "|".
 func tokens(s string) string {
 	var rows []string
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		line, _, _ = strings.Cut(line, "#")
 		var f []string
-		for _, t := range strings.Fields(line) {
+		for t := range strings.FieldsSeq(line) {
 			if t != "|" {
 				f = append(f, t)
 			}
@@ -72,12 +72,12 @@ func TestFirmwareOrder(t *testing.T) {
 	// The Moonlander's LEDs run down each column: the top row is every
 	// fifth LED.
 	got := tokens(generate(t, "moonlander", Options{Order: Firmware}))
-	if top := strings.Split(got, "\n")[0]; top != "0 5 10 15 20 25 61 56 51 46 41 36" {
+	if top, _, _ := strings.Cut(got, "\n"); top != "0 5 10 15 20 25 61 56 51 46 41 36" {
 		t.Errorf("moonlander firmware top row = %q", top)
 	}
 	// The Voyager's LEDs are already in Keymapp's order, 0 included.
 	v := tokens(generate(t, "voyager", Options{Order: Firmware}))
-	if top := strings.Split(v, "\n")[0]; top != "0 1 2 3 4 5 26 27 28 29 30 31" {
+	if top, _, _ := strings.Cut(v, "\n"); top != "0 1 2 3 4 5 26 27 28 29 30 31" {
 		t.Errorf("voyager firmware top row = %q", top)
 	}
 }
@@ -108,7 +108,9 @@ func TestOnePieceBoard(t *testing.T) {
 		t.Fatal(err)
 	}
 	var b bytes.Buffer
-	g.Format(&b)
+	if err := g.Format(&b); err != nil {
+		t.Fatal(err)
+	}
 	if got := b.String(); got != " -  1\n 2  3\n" {
 		t.Errorf("one-piece map = %q", got)
 	}
@@ -118,5 +120,64 @@ func TestFirmwareNeedsRGBMatrix(t *testing.T) {
 	kb, _ := Parse(strings.NewReader(`{"keyboard_name":"pad","layouts":{"LAYOUT":{"layout":[{"matrix":[0,0],"x":0,"y":0}]}}}`))
 	if _, err := kb.Map(Options{Order: Firmware}); err == nil {
 		t.Error("firmware order without rgb_matrix: no error")
+	}
+}
+
+// The Planck EZ's map ships with keybars; QMK's API wraps the definition.
+func TestPlanckFromTheAPI(t *testing.T) {
+	want, err := os.ReadFile(filepath.Join("..", "..", "maps", "planck.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := generate(t, "planck", Options{Layout: "LAYOUT_planck_1x2uC"})
+	if tokens(got) != tokens(string(want)) {
+		t.Errorf("generated\n%s\nbuilt-in\n%s", tokens(got), tokens(string(want)))
+	}
+}
+
+// A row-staggered board is laid out by rows, its arrow keys in theirs.
+func TestRowStaggered(t *testing.T) {
+	g, err := load(t, "keychron_q1").Map(Options{Order: Firmware})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Cells) != 6 || len(g.Cells[0]) != 16 || g.Split != 0 {
+		t.Fatalf("%d rows of %d", len(g.Cells), len(g.Cells[0]))
+	}
+	if g.Cells[0][0] != 0 || g.Cells[5][0] != 72 || g.Cells[5][15] != 81 {
+		t.Errorf("corners %d %d %d", g.Cells[0][0], g.Cells[5][0], g.Cells[5][15])
+	}
+}
+
+// A split board whose thumb keys fill the gap splits by its matrix.
+func TestSplitByMatrix(t *testing.T) {
+	g, err := load(t, "kyria").Map(Options{Order: Firmware})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Cells) != 3 || len(g.Cells[0]) != 12 || g.Split != 6 {
+		t.Errorf("%d rows of %d, split %d", len(g.Cells), len(g.Cells[0]), g.Split)
+	}
+}
+
+func TestShape(t *testing.T) {
+	sh, err := load(t, "keychron_q1").Shape(Options{Order: Firmware})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sh.Name != "Keychron Q1" || len(sh.Keys) != 82 || sh.Rows != 6 || sh.Cols != 16 {
+		t.Fatalf("%s: %d keys, %d × %d", sh.Name, len(sh.Keys), sh.Rows, sh.Cols)
+	}
+	space := sh.Keys[0]
+	for _, k := range sh.Keys {
+		if k.W > space.W {
+			space = k
+		}
+	}
+	if space.W != 6.25 || space.Row != 5 || space.LED != 75 {
+		t.Errorf("the space bar: %+v", space)
+	}
+	if sh.Width != 16.25 {
+		t.Errorf("width %v", sh.Width)
 	}
 }

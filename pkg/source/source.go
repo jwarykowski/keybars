@@ -17,7 +17,7 @@ import (
 // Parse reads one line of cava raw ascii output: heights separated by ';'.
 func Parse(line string) ([]int, error) {
 	var out []int
-	for _, f := range strings.Split(strings.TrimSpace(line), ";") {
+	for f := range strings.SplitSeq(strings.TrimSpace(line), ";") {
 		if f == "" {
 			continue
 		}

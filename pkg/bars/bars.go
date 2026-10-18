@@ -37,7 +37,7 @@ func New(grid layout.Grid, leds keymapp.LEDs, colours []keymapp.Colour, reserve 
 	for _, l := range reserve {
 		r.reserve[l] = true
 	}
-	for level := 0; level < grid.Height; level++ {
+	for level := range grid.Height {
 		i := 0
 		if grid.Height > 1 {
 			i = level * (len(colours) - 1) / (grid.Height - 1)
@@ -53,7 +53,7 @@ func New(grid layout.Grid, leds keymapp.LEDs, colours []keymapp.Colour, reserve 
 func (r *Renderer) Target(heights, peaks []int) map[int]keymapp.Colour {
 	t := map[int]keymapp.Colour{}
 	for x := 0; x < r.grid.Columns() && x < len(heights); x++ {
-		for level := 0; level < r.grid.Height; level++ {
+		for level := range r.grid.Height {
 			led, ok := r.grid.LED(x, level)
 			if !ok || r.reserve[led] {
 				continue
@@ -110,7 +110,7 @@ func (r *Renderer) Clear() error {
 // ParseColours reads a comma-separated list of #rrggbb colours.
 func ParseColours(s string) ([]keymapp.Colour, error) {
 	var out []keymapp.Colour
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		var c keymapp.Colour
 		p := strings.TrimPrefix(strings.TrimSpace(part), "#")
 		if len(p) != 6 {
