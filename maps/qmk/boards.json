@@ -1,0 +1,23 @@
+[
+  {"id": "keychron-q1", "name": "Keychron Q1", "qmk": "keychron/q1v2/ansi_encoder", "match": ["Keychron Q1", "Q1"]},
+  {"id": "keychron-q2", "name": "Keychron Q2", "qmk": "keychron/q2/ansi_encoder", "match": ["Keychron Q2", "Q2"]},
+  {"id": "keychron-q3", "name": "Keychron Q3", "qmk": "keychron/q3/ansi_encoder", "match": ["Keychron Q3", "Q3"]},
+  {"id": "keychron-q5", "name": "Keychron Q5", "qmk": "keychron/q5/ansi_encoder", "match": ["Keychron Q5", "Q5"]},
+  {"id": "keychron-q6", "name": "Keychron Q6", "qmk": "keychron/q6/ansi_encoder", "match": ["Keychron Q6", "Q6"]},
+  {"id": "keychron-q60", "name": "Keychron Q60", "qmk": "keychron/q60/ansi", "match": ["Keychron Q60", "Q60"]},
+  {"id": "keychron-q65", "name": "Keychron Q65", "qmk": "keychron/q65/ansi_encoder", "match": ["Keychron Q65", "Q65"]},
+  {"id": "keychron-v1", "name": "Keychron V1", "qmk": "keychron/v1/ansi_encoder", "match": ["Keychron V1", "V1"]},
+  {"id": "keychron-v3", "name": "Keychron V3", "qmk": "keychron/v3/ansi_encoder", "match": ["Keychron V3", "V3"]},
+  {"id": "keychron-v6", "name": "Keychron V6", "qmk": "keychron/v6/ansi_encoder", "match": ["Keychron V6", "V6"]},
+  {"id": "keychron-v10", "name": "Keychron V10", "qmk": "keychron/v10/ansi_encoder", "match": ["Keychron V10", "V10"]},
+  {"id": "gmmk-pro", "name": "GMMK Pro", "qmk": "gmmk/pro/rev1/ansi", "match": ["GMMK Pro"]},
+  {"id": "gmmk-2-65", "name": "GMMK 2 65%", "qmk": "gmmk/gmmk2/p65/ansi", "match": ["GMMK V2 65", "GMMK 2 65"]},
+  {"id": "gmmk-2-96", "name": "GMMK 2 96%", "qmk": "gmmk/gmmk2/p96/ansi", "match": ["GMMK V2 96", "GMMK 2 96"]},
+  {"id": "drop-ctrl", "name": "Drop CTRL", "qmk": "drop/ctrl/v2", "match": ["CTRL", "Drop CTRL", "Massdrop CTRL"]},
+  {"id": "drop-alt", "name": "Drop ALT", "qmk": "drop/alt/v2", "match": ["ALT", "Drop ALT", "Massdrop ALT"]},
+  {"id": "kbd67-mkii-rgb", "name": "KBD67 MkII RGB", "qmk": "kbdfans/kbd67/mkiirgb/v3", "match": ["KBD67 MkII RGB", "kbd67mkiirgb"]},
+  {"id": "corne", "name": "Corne", "qmk": "crkbd/rev1", "match": ["Corne", "crkbd"]},
+  {"id": "sofle", "name": "Sofle RGB", "qmk": "sofle/keyhive", "match": ["Sofle"]},
+  {"id": "kyria", "name": "Kyria", "qmk": "splitkb/kyria/rev3", "match": ["Kyria"]},
+  {"id": "lulu", "name": "Lulu", "qmk": "boardsource/lulu/rp2040", "match": ["Lulu"]}
+]

@@ -24,7 +24,7 @@ holds a moment and falls like a hi-fi meter.
 ## Requirements
 
 - A keyboard with a backend:
-  - ZSA Moonlander and Voyager through [Keymapp](https://www.zsa.io/flash),
+  - ZSA Moonlander, Voyager and Planck EZ through [Keymapp](https://www.zsa.io/flash),
     running with its **API enabled**, or
   - a per-key RGB keyboard OpenRGB supports, with OpenRGB running and its
     **SDK server started** (`openrgb --server`, or "Start Server" on its SDK
@@ -216,7 +216,20 @@ Columns become bars and rows become levels, so any size works. `-` marks a gap, 
 
 `keybars maps` lists the built-in maps and which one the connected keyboard
 uses (matched on the name Keymapp reports). The Moonlander and Voyager maps
-are tested on real boards, and `keybars gen` reproduces both from QMK.
+are tested on real boards, and `keybars gen` reproduces both from QMK; the
+Planck EZ's is generated the same way.
+
+For OpenRGB keyboards that don't report their key matrix, keybars also has
+maps generated from QMK, in the firmware's LED order, for 21 popular boards:
+Keychron's Q1, Q2, Q3, Q5, Q6, Q60, Q65, V1, V3, V6 and V10, the GMMK Pro and
+GMMK 2 (65% and 96%), Drop's CTRL and ALT, the KBD67 MkII RGB, Corne, Sofle,
+Kyria and Lulu ([`maps/qmk`](maps/qmk)). One is used when the name OpenRGB
+reports matches a board in [`boards.json`](maps/qmk/boards.json) exactly.
+They suit boards whose QMK firmware talks to OpenRGB directly; they haven't
+been checked on the boards themselves, so `keybars test` is worth a run.
+[`scripts/maps.sh`](scripts/maps.sh) regenerates them all, with each board's
+shape (every key's place and size) in [`maps/shapes.json`](maps/shapes.json)
+for previews.
 
 ### Adding a keyboard
 
@@ -234,9 +247,12 @@ row, thumbs last, while the Moonlander's firmware runs down each column. `gen`
 follows Keymapp by default; `-order firmware` gives QMK's `rgb_matrix`
 order, for backends that talk to the firmware directly. The thumb cluster
 and a split half's short inner column are left out (`-inner` keeps the
-latter). Definitions that inherit from a parent `info.json` aren't followed
-yet, so pass a merged file (`qmk info -kb <keyboard> -f json`) for those.
-Check the result with `keybars test` as below.
+latter). Definitions come from QMK's API (keyboards.qmk.fm), merged with the
+parent `info.json` files they inherit from. Row-staggered boards are laid out
+by rows, each key in the column under its centre; when there's no `LAYOUT`,
+the layout with the most keys is used (`-layout` picks another). `-json`
+prints the board's shape instead: each key's place and size, and where the
+map puts it. Check the result with `keybars test` as below.
 
 Otherwise, find the indices by hand:
 

@@ -46,7 +46,7 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestBuiltinMaps(t *testing.T) {
-	if got := Builtin(builtin); !slices.Equal(got, []string{"moonlander", "voyager"}) {
+	if got := Builtin(builtin); !slices.Equal(got, []string{"moonlander", "planck", "voyager"}) {
 		t.Fatalf("Builtin = %v", got)
 	}
 	for _, tc := range []struct {
@@ -84,13 +84,13 @@ func TestNew(t *testing.T) {
 	if _, err := New(m, 6); err == nil {
 		t.Error("height 6 on a 5-row map: want an error")
 	}
-	if _, err := Load(builtin, "planck"); err == nil {
+	if _, err := Load(builtin, "ergodox"); err == nil {
 		t.Error("unknown model: want an error")
 	}
 }
 
 func TestDetect(t *testing.T) {
-	for kb, want := range map[string]string{"Moonlander MK1": "moonlander", "Voyager": "voyager", "ErgoDox EZ": ""} {
+	for kb, want := range map[string]string{"Moonlander MK1": "moonlander", "Voyager": "voyager", "Planck EZ Glow": "planck", "ErgoDox EZ": ""} {
 		got, ok := Detect(builtin, kb)
 		if got != want || ok != (want != "") {
 			t.Errorf("Detect(%q) = %q %v, want %q", kb, got, ok, want)

@@ -122,3 +122,62 @@ func TestFirmwareNeedsRGBMatrix(t *testing.T) {
 		t.Error("firmware order without rgb_matrix: no error")
 	}
 }
+
+// The Planck EZ's map ships with keybars; QMK's API wraps the definition.
+func TestPlanckFromTheAPI(t *testing.T) {
+	want, err := os.ReadFile(filepath.Join("..", "..", "maps", "planck.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := generate(t, "planck", Options{Layout: "LAYOUT_planck_1x2uC"})
+	if tokens(got) != tokens(string(want)) {
+		t.Errorf("generated\n%s\nbuilt-in\n%s", tokens(got), tokens(string(want)))
+	}
+}
+
+// A row-staggered board is laid out by rows, its arrow keys in theirs.
+func TestRowStaggered(t *testing.T) {
+	g, err := load(t, "keychron_q1").Map(Options{Order: Firmware})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Cells) != 6 || len(g.Cells[0]) != 16 || g.Split != 0 {
+		t.Fatalf("%d rows of %d", len(g.Cells), len(g.Cells[0]))
+	}
+	if g.Cells[0][0] != 0 || g.Cells[5][0] != 72 || g.Cells[5][15] != 81 {
+		t.Errorf("corners %d %d %d", g.Cells[0][0], g.Cells[5][0], g.Cells[5][15])
+	}
+}
+
+// A split board whose thumb keys fill the gap splits by its matrix.
+func TestSplitByMatrix(t *testing.T) {
+	g, err := load(t, "kyria").Map(Options{Order: Firmware})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Cells) != 3 || len(g.Cells[0]) != 12 || g.Split != 6 {
+		t.Errorf("%d rows of %d, split %d", len(g.Cells), len(g.Cells[0]), g.Split)
+	}
+}
+
+func TestShape(t *testing.T) {
+	sh, err := load(t, "keychron_q1").Shape(Options{Order: Firmware})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sh.Name != "Keychron Q1" || len(sh.Keys) != 82 || sh.Rows != 6 || sh.Cols != 16 {
+		t.Fatalf("%s: %d keys, %d × %d", sh.Name, len(sh.Keys), sh.Rows, sh.Cols)
+	}
+	space := sh.Keys[0]
+	for _, k := range sh.Keys {
+		if k.W > space.W {
+			space = k
+		}
+	}
+	if space.W != 6.25 || space.Row != 5 || space.LED != 75 {
+		t.Errorf("the space bar: %+v", space)
+	}
+	if sh.Width != 16.25 {
+		t.Errorf("width %v", sh.Width)
+	}
+}
