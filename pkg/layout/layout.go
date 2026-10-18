@@ -37,7 +37,7 @@ func Parse(name string, r io.Reader) (Map, error) {
 	for n := 1; sc.Scan(); n++ {
 		line, _, _ := strings.Cut(sc.Text(), "#")
 		var row []int
-		for _, f := range strings.Fields(line) {
+		for f := range strings.FieldsSeq(line) {
 			switch f {
 			case "|":
 				continue
@@ -70,6 +70,23 @@ func Parse(name string, r io.Reader) (Map, error) {
 		m.cells[i] = row
 	}
 	return m, nil
+}
+
+// FromCells makes a map from a grid of key indices, top row first, -1 for
+// a gap. Rows may be ragged; empty rows are dropped.
+func FromCells(name string, cells [][]int) (Map, error) {
+	var b strings.Builder
+	for _, row := range cells {
+		for _, led := range row {
+			if led < 0 {
+				b.WriteString(" -")
+			} else {
+				b.WriteString(" " + strconv.Itoa(led))
+			}
+		}
+		b.WriteString("\n")
+	}
+	return Parse(name, strings.NewReader(b.String()))
 }
 
 // Rows is the number of rows of keys.

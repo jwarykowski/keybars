@@ -14,20 +14,16 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/jwarykowski/keybars/pkg/rgb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Colour is an RGB colour.
-type Colour struct{ R, G, B uint8 }
+type Colour = rgb.Colour
 
-// LEDs is what the renderer needs from a keyboard, so tests can record calls.
-type LEDs interface {
-	// Set colours one LED.
-	Set(led int, c Colour) error
-	// RestoreAll returns every LED to its layout colour.
-	RestoreAll() error
-}
+// LEDs is what the renderer needs from a keyboard.
+type LEDs = rgb.LEDs
 
 // Client is a connection to Keymapp.
 type Client struct {
@@ -190,6 +186,6 @@ func fields(vs ...int) []byte {
 // raw passes pre-encoded protobuf bytes through gRPC.
 type raw struct{}
 
-func (raw) Marshal(v any) ([]byte, error)   { return *(v.(*[]byte)), nil }
-func (raw) Unmarshal(b []byte, v any) error { *(v.(*[]byte)) = append([]byte(nil), b...); return nil }
+func (raw) Marshal(v any) ([]byte, error)   { return *v.(*[]byte), nil }
+func (raw) Unmarshal(b []byte, v any) error { *v.(*[]byte) = append([]byte(nil), b...); return nil }
 func (raw) Name() string                    { return "proto" }

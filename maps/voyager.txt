@@ -1,8 +1,9 @@
 # ZSA Voyager: Keymapp's index for each key, rows top to bottom. Keymapp
 # numbers each half on its own, left half 0-25 then right half 26-51, row by
 # row from left to right (rows of 6, then 2 thumb keys). Thumbs are left
-# out. Derived from the Moonlander's numbering; untested on a real board.
- 0  1  2  3  4  5 | 26 27 28 29 30 31
+# out. Key 0 (top-left) is a gap: Keymapp's API never lights index 0.
+# Matches `keybars gen zsa/voyager`; tested on a real board.
+ -  1  2  3  4  5 | 26 27 28 29 30 31
  6  7  8  9 10 11 | 32 33 34 35 36 37
 12 13 14 15 16 17 | 38 39 40 41 42 43
 18 19 20 21 22 23 | 44 45 46 47 48 49

@@ -17,7 +17,7 @@ import (
 // Parse reads one line of cava raw ascii output: heights separated by ';'.
 func Parse(line string) ([]int, error) {
 	var out []int
-	for _, f := range strings.Split(strings.TrimSpace(line), ";") {
+	for f := range strings.SplitSeq(strings.TrimSpace(line), ";") {
 		if f == "" {
 			continue
 		}
@@ -68,7 +68,9 @@ noise_reduction = %d
 // Cava runs cava with a generated config for bars columns of up to height,
 // and streams its frames until ctx ends or cava exits. smooth is cava's
 // noise_reduction, 0-100: lower is jumpier, higher is slower and smoother.
-func Cava(ctx context.Context, bars, height, fps, smooth int, frames chan<- []int) error {
+// source, when set, names the capture device for cava's default input
+// method (macOS output capture needs a loopback device such as BlackHole).
+func Cava(ctx context.Context, bars, height, fps, smooth int, source string, frames chan<- []int) error {
 	f, err := os.CreateTemp("", "keybars-cava-*.conf")
 	if err != nil {
 		return err
@@ -76,6 +78,11 @@ func Cava(ctx context.Context, bars, height, fps, smooth int, frames chan<- []in
 	defer os.Remove(f.Name())
 	if _, err := fmt.Fprintf(f, cavaConfig, bars, fps, height, smooth); err != nil {
 		return err
+	}
+	if source != "" {
+		if _, err := fmt.Fprintf(f, "\n[input]\nsource = %s\n", source); err != nil {
+			return err
+		}
 	}
 	if err := f.Close(); err != nil {
 		return err

@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -13,7 +14,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: gofmt
-        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...
+      # also checks formatting: gofumpt and goimports (.golangci.yml)
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14.0
       - run: go test ./...
+      - name: third-party notices are current
+        run: scripts/notices.sh && git diff --exit-code THIRD_PARTY_NOTICES.md
