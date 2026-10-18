@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jwarykowski/keybars/internal/keymapp"
-	"github.com/jwarykowski/keybars/internal/layout"
+	"github.com/jwarykowski/keybars/pkg/keymapp"
+	"github.com/jwarykowski/keybars/pkg/layout"
 )
 
 // led is the LED under bar x at level in the test grid.
@@ -72,7 +72,9 @@ func TestFrameColoursByLevel(t *testing.T) {
 func TestFrameSendsOnlyChanges(t *testing.T) {
 	r, f, _ := setup(t)
 	heights := make([]int, columns)
-	r.Frame(heights, nil)
+	if _, err := r.Frame(heights, nil); err != nil {
+		t.Fatal(err)
+	}
 	heights[3] = 1
 	n, err := r.Frame(heights, nil)
 	if err != nil || n != 1 {
@@ -90,7 +92,9 @@ func TestReserveIsNeverTouched(t *testing.T) {
 	r, f, _ := setup(t, keep)
 	heights := make([]int, columns)
 	heights[2] = 2
-	r.Frame(heights, nil)
+	if _, err := r.Frame(heights, nil); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := f.set[keep]; ok {
 		t.Errorf("reserved LED %d was set", keep)
 	}
@@ -112,12 +116,16 @@ func TestPeakDot(t *testing.T) {
 	heights := make([]int, columns)
 	peaks := make([]int, columns)
 	peaks[4] = 2 // bar 4 empty, its peak on the top level
-	r.Frame(heights, peaks)
+	if _, err := r.Frame(heights, peaks); err != nil {
+		t.Fatal(err)
+	}
 	if f.set[led(g, 4, 1)] != (keymapp.Colour{B: 255}) || f.set[led(g, 4, 0)] != dark {
 		t.Errorf("want a dot on top and dark below, got %v %v", f.set[led(g, 4, 1)], f.set[led(g, 4, 0)])
 	}
 	heights[4] = 2 // the bar covers its peak: bar colours win
-	r.Frame(heights, peaks)
+	if _, err := r.Frame(heights, peaks); err != nil {
+		t.Fatal(err)
+	}
 	if f.set[led(g, 4, 1)] != red {
 		t.Errorf("bar over its peak: want red, got %v", f.set[led(g, 4, 1)])
 	}
@@ -126,7 +134,9 @@ func TestPeakDot(t *testing.T) {
 func TestInvalidateResends(t *testing.T) {
 	r, f, _ := setup(t)
 	heights := make([]int, columns)
-	r.Frame(heights, nil)
+	if _, err := r.Frame(heights, nil); err != nil {
+		t.Fatal(err)
+	}
 	r.Invalidate()
 	if n, _ := r.Frame(heights, nil); n != columns*2 {
 		t.Errorf("after Invalidate sent %d, want the whole %d-LED grid", n, columns*2)
@@ -144,5 +154,36 @@ func TestScale(t *testing.T) {
 	got = Scale([]int{0, 4, 12, 32}, 8, 2, 4)
 	if want := []int{0, 1, 3, 4}; !slices.Equal(got, want) {
 		t.Errorf("gain 2: %v, want %v", got, want)
+	}
+}
+
+// flushing is a backend that buffers Sets, as OpenRGB's does.
+type flushing struct {
+	fake
+	flushes int
+}
+
+func (f *flushing) Flush() error { f.flushes++; return nil }
+
+// A buffering backend is flushed once per frame that changed something.
+func TestFrameFlushesOnce(t *testing.T) {
+	m, err := layout.Parse("t", strings.NewReader("0 1 2\n3 4 5\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _ := layout.New(m, 2)
+	f := &flushing{fake: fake{set: map[int]keymapp.Colour{}}}
+	r := New(g, f, []keymapp.Colour{green}, nil)
+	for i, want := range []int{1, 1, 2} {
+		h := []int{2, 1, 0}
+		if i == 2 {
+			h = []int{0, 1, 0}
+		}
+		if _, err := r.Frame(h, nil); err != nil {
+			t.Fatal(err)
+		}
+		if f.flushes != want {
+			t.Errorf("frame %d: %d flushes, want %d", i, f.flushes, want)
+		}
 	}
 }

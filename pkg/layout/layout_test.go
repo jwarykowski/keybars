@@ -46,7 +46,7 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestBuiltinMaps(t *testing.T) {
-	if got := Builtin(builtin); !slices.Equal(got, []string{"moonlander", "voyager"}) {
+	if got := Builtin(builtin); !slices.Equal(got, []string{"moonlander", "planck", "voyager"}) {
 		t.Fatalf("Builtin = %v", got)
 	}
 	for _, tc := range []struct {
@@ -84,16 +84,32 @@ func TestNew(t *testing.T) {
 	if _, err := New(m, 6); err == nil {
 		t.Error("height 6 on a 5-row map: want an error")
 	}
-	if _, err := Load(builtin, "planck"); err == nil {
+	if _, err := Load(builtin, "ergodox"); err == nil {
 		t.Error("unknown model: want an error")
 	}
 }
 
 func TestDetect(t *testing.T) {
-	for kb, want := range map[string]string{"Moonlander MK1": "moonlander", "Voyager": "voyager", "ErgoDox EZ": ""} {
+	for kb, want := range map[string]string{"Moonlander MK1": "moonlander", "Voyager": "voyager", "Planck EZ Glow": "planck", "ErgoDox EZ": ""} {
 		got, ok := Detect(builtin, kb)
 		if got != want || ok != (want != "") {
 			t.Errorf("Detect(%q) = %q %v, want %q", kb, got, ok, want)
 		}
+	}
+}
+
+func TestFromCells(t *testing.T) {
+	m, err := FromCells("pad", [][]int{{0, 1, -1}, {}, {2, 3}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Rows() != 2 || m.Columns() != 3 {
+		t.Fatalf("%d rows x %d columns, want 2 x 3", m.Rows(), m.Columns())
+	}
+	if got := m.LEDs(); len(got) != 4 || got[3] != 3 {
+		t.Errorf("LEDs = %v", got)
+	}
+	if _, err := FromCells("empty", nil); err == nil {
+		t.Error("no rows: no error")
 	}
 }
