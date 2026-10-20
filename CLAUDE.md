@@ -8,7 +8,10 @@ working here.
 
 ## Commands
 
-- `go vet ./...`, `go test ./...`, with `GOTOOLCHAIN=auto`.
+- `go vet ./...`, `go test -race ./...` (CI races too), with
+  `GOTOOLCHAIN=auto`.
+- Tests must not need a keyboard: the commands' tests drive a fake Keymapp
+  socket (`hardware_test.go`).
 - After any dependency change: `scripts/notices.sh`. CI fails if
   THIRD_PARTY_NOTICES.md is stale (Dependabot PRs need this too).
 - `scripts/maps.sh` regenerates the QMK maps and `maps/shapes.json` from
