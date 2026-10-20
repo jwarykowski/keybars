@@ -70,12 +70,23 @@ noise_reduction = %d
 // noise_reduction, 0-100: lower is jumpier, higher is slower and smoother.
 // source, when set, names the capture device for cava's default input
 // method (macOS output capture needs a loopback device such as BlackHole).
+// frames is closed when Cava returns, however it ends.
 func Cava(ctx context.Context, bars, height, fps, smooth int, source string, frames chan<- []int) error {
+	reading := false
+	defer func() {
+		if !reading {
+			close(frames)
+		}
+	}()
+	if strings.ContainsAny(source, "\r\n") {
+		return fmt.Errorf("cava source %q: no line breaks", source)
+	}
 	f, err := os.CreateTemp("", "keybars-cava-*.conf")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(f.Name())
+	defer f.Close() // on an early return; closed below once written
 	if _, err := fmt.Fprintf(f, cavaConfig, bars, fps, height, smooth); err != nil {
 		return err
 	}
@@ -96,6 +107,7 @@ func Cava(ctx context.Context, bars, height, fps, smooth int, source string, fra
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start cava: %w (is it installed?)", err)
 	}
+	reading = true
 	readErr := Read(out, frames)
 	if err := cmd.Wait(); err != nil && ctx.Err() == nil {
 		return fmt.Errorf("cava: %w", err)

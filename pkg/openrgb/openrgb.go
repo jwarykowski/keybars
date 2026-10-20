@@ -61,6 +61,10 @@ const (
 	noLED        = 0xFFFFFFFF
 )
 
+// maxPacket is the largest packet read; a big device's description is tens
+// of kilobytes, so more is a broken or hostile server.
+const maxPacket = 16 << 20
+
 // timeout bounds every request, so a stalled server can't hang keybars.
 const timeout = 5 * time.Second
 
@@ -190,7 +194,12 @@ func (c *Client) read() {
 			return
 		}
 		id := binary.LittleEndian.Uint32(h[8:])
-		body := make([]byte, binary.LittleEndian.Uint32(h[12:]))
+		size := binary.LittleEndian.Uint32(h[12:])
+		if size > maxPacket {
+			c.readErr = fmt.Errorf("openrgb: %d-byte packet is too big", size)
+			return
+		}
+		body := make([]byte, size)
 		if _, err := io.ReadFull(r, body); err != nil {
 			c.readErr = err
 			return
@@ -258,7 +267,8 @@ func u32(v uint32) []byte { return binary.LittleEndian.AppendUint32(nil, v) }
 
 // Device is one OpenRGB device driven as a keybars backend. It takes the
 // device into its per-LED ("Direct") mode on the first Set, and RestoreAll
-// puts back the mode, and per-LED colours, it had before.
+// puts back the mode, and per-LED colours, it had before. It isn't safe for
+// concurrent use.
 type Device struct {
 	c      *Client
 	ctl    Controller

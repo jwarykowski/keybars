@@ -28,7 +28,7 @@ func stateDir() (string, error) {
 }
 
 // running is the pid of the background keybars, removing a pid file left by
-// one that has exited.
+// one that has exited, or naming a process that isn't keybars.
 func running(dir string) (int, bool) {
 	pidFile := filepath.Join(dir, "keybars.pid")
 	b, err := os.ReadFile(pidFile)
@@ -36,7 +36,7 @@ func running(dir string) (int, bool) {
 		return 0, false
 	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil || !alive(pid) {
+	if err != nil || !alive(pid) || !ours(pid) {
 		os.Remove(pidFile)
 		return 0, false
 	}

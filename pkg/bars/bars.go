@@ -8,23 +8,22 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jwarykowski/keybars/pkg/keymapp"
 	"github.com/jwarykowski/keybars/pkg/layout"
 	"github.com/jwarykowski/keybars/pkg/rgb"
 )
 
-// Renderer paints frames onto a keyboard.
+// Renderer paints frames onto a keyboard. It isn't safe for concurrent use.
 type Renderer struct {
 	grid    layout.Grid
-	leds    keymapp.LEDs
-	colours []keymapp.Colour // one per level, bottom first
+	leds    rgb.LEDs
+	colours []rgb.Colour // one per level, bottom first
 	reserve map[int]bool
-	shown   map[int]keymapp.Colour // what each LED shows now; absent = layout
-	peak    *keymapp.Colour        // peak dot colour; nil = no dots
+	shown   map[int]rgb.Colour // what each LED shows now; absent = layout
+	peak    *rgb.Colour        // peak dot colour; nil = no dots
 }
 
 // WithPeaks draws a dot of colour c at each bar's peak level (see Peaks).
-func (r *Renderer) WithPeaks(c keymapp.Colour) *Renderer {
+func (r *Renderer) WithPeaks(c rgb.Colour) *Renderer {
 	r.peak = &c
 	return r
 }
@@ -32,8 +31,8 @@ func (r *Renderer) WithPeaks(c keymapp.Colour) *Renderer {
 // New returns a renderer. colours run bottom to top and are stretched over
 // the grid's height; reserved LEDs are never touched. Unlit keys are dark:
 // once Keymapp drives any key, the firmware shows only what the API sets.
-func New(grid layout.Grid, leds keymapp.LEDs, colours []keymapp.Colour, reserve []int) *Renderer {
-	r := &Renderer{grid: grid, leds: leds, reserve: map[int]bool{}, shown: map[int]keymapp.Colour{}}
+func New(grid layout.Grid, leds rgb.LEDs, colours []rgb.Colour, reserve []int) *Renderer {
+	r := &Renderer{grid: grid, leds: leds, reserve: map[int]bool{}, shown: map[int]rgb.Colour{}}
 	for _, l := range reserve {
 		r.reserve[l] = true
 	}
@@ -50,8 +49,8 @@ func New(grid layout.Grid, leds keymapp.LEDs, colours []keymapp.Colour, reserve 
 // Target is what every LED in the grid should show for heights (one per
 // bar, 0..grid height) and peaks (nil without dots); absent means the
 // layout's colour.
-func (r *Renderer) Target(heights, peaks []int) map[int]keymapp.Colour {
-	t := map[int]keymapp.Colour{}
+func (r *Renderer) Target(heights, peaks []int) map[int]rgb.Colour {
+	t := map[int]rgb.Colour{}
 	for x := 0; x < r.grid.Columns() && x < len(heights); x++ {
 		for level := range r.grid.Height {
 			led, ok := r.grid.LED(x, level)
@@ -64,7 +63,7 @@ func (r *Renderer) Target(heights, peaks []int) map[int]keymapp.Colour {
 			case r.peak != nil && x < len(peaks) && peaks[x] == level+1:
 				t[led] = *r.peak
 			default:
-				t[led] = keymapp.Colour{}
+				t[led] = rgb.Colour{}
 			}
 		}
 	}
@@ -98,20 +97,20 @@ func (r *Renderer) Frame(heights, peaks []int) (int, error) {
 // every LED: Keymapp drops API colours when anything restores the layout
 // (another tool, a kontroll --sustain timer), and nothing tells us.
 func (r *Renderer) Invalidate() {
-	r.shown = map[int]keymapp.Colour{}
+	r.shown = map[int]rgb.Colour{}
 }
 
 // Clear hands the board back to the layout.
 func (r *Renderer) Clear() error {
-	r.shown = map[int]keymapp.Colour{}
+	r.shown = map[int]rgb.Colour{}
 	return r.leds.RestoreAll()
 }
 
 // ParseColours reads a comma-separated list of #rrggbb colours.
-func ParseColours(s string) ([]keymapp.Colour, error) {
-	var out []keymapp.Colour
+func ParseColours(s string) ([]rgb.Colour, error) {
+	var out []rgb.Colour
 	for part := range strings.SplitSeq(s, ",") {
-		var c keymapp.Colour
+		var c rgb.Colour
 		p := strings.TrimPrefix(strings.TrimSpace(part), "#")
 		if len(p) != 6 {
 			return nil, fmt.Errorf("colour %q: want #rrggbb", part)

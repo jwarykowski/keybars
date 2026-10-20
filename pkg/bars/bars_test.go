@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jwarykowski/keybars/pkg/keymapp"
 	"github.com/jwarykowski/keybars/pkg/layout"
+	"github.com/jwarykowski/keybars/pkg/rgb"
 )
 
 // led is the LED under bar x at level in the test grid.
@@ -17,17 +17,17 @@ func led(g layout.Grid, x, level int) int {
 
 // fake records what a renderer sends.
 type fake struct {
-	set map[int]keymapp.Colour
+	set map[int]rgb.Colour
 	all int
 }
 
-func (f *fake) Set(led int, c keymapp.Colour) error { f.set[led] = c; return nil }
-func (f *fake) RestoreAll() error                   { f.all++; return nil }
+func (f *fake) Set(led int, c rgb.Colour) error { f.set[led] = c; return nil }
+func (f *fake) RestoreAll() error               { f.all++; return nil }
 
 var (
-	green = keymapp.Colour{G: 255}
-	red   = keymapp.Colour{R: 255}
-	dark  = keymapp.Colour{}
+	green = rgb.Colour{G: 255}
+	red   = rgb.Colour{R: 255}
+	dark  = rgb.Colour{}
 )
 
 // columns is the test grid's width: 12 bars, 2 rows.
@@ -46,8 +46,8 @@ func setup(t *testing.T, reserve ...int) (*Renderer, *fake, layout.Grid) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fake{set: map[int]keymapp.Colour{}}
-	return New(g, f, []keymapp.Colour{green, red}, reserve), f, g
+	f := &fake{set: map[int]rgb.Colour{}}
+	return New(g, f, []rgb.Colour{green, red}, reserve), f, g
 }
 
 func TestFrameColoursByLevel(t *testing.T) {
@@ -112,14 +112,14 @@ func TestParseColours(t *testing.T) {
 
 func TestPeakDot(t *testing.T) {
 	r, f, g := setup(t)
-	r.WithPeaks(keymapp.Colour{B: 255})
+	r.WithPeaks(rgb.Colour{B: 255})
 	heights := make([]int, columns)
 	peaks := make([]int, columns)
 	peaks[4] = 2 // bar 4 empty, its peak on the top level
 	if _, err := r.Frame(heights, peaks); err != nil {
 		t.Fatal(err)
 	}
-	if f.set[led(g, 4, 1)] != (keymapp.Colour{B: 255}) || f.set[led(g, 4, 0)] != dark {
+	if f.set[led(g, 4, 1)] != (rgb.Colour{B: 255}) || f.set[led(g, 4, 0)] != dark {
 		t.Errorf("want a dot on top and dark below, got %v %v", f.set[led(g, 4, 1)], f.set[led(g, 4, 0)])
 	}
 	heights[4] = 2 // the bar covers its peak: bar colours win
@@ -172,8 +172,8 @@ func TestFrameFlushesOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	g, _ := layout.New(m, 2)
-	f := &flushing{fake: fake{set: map[int]keymapp.Colour{}}}
-	r := New(g, f, []keymapp.Colour{green}, nil)
+	f := &flushing{fake: fake{set: map[int]rgb.Colour{}}}
+	r := New(g, f, []rgb.Colour{green}, nil)
 	for i, want := range []int{1, 1, 2} {
 		h := []int{2, 1, 0}
 		if i == 2 {

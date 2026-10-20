@@ -19,6 +19,6 @@ jobs:
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.14.0
-      - run: go test ./...
+      - run: go test -race ./...
       - name: third-party notices are current
         run: scripts/notices.sh && git diff --exit-code THIRD_PARTY_NOTICES.md

@@ -93,7 +93,7 @@ func ParseController(b []byte, version uint32) (ctl Controller, err error) {
 		// height and width say how much follows.
 		if r.u16() > 0 {
 			h, w := int(r.u32()), int(r.u32())
-			if h*w*4 > len(b)-r.off {
+			if uint64(h)*uint64(w) > uint64(len(b)-r.off)/4 {
 				return ctl, fmt.Errorf("zone %q: %dx%d matrix runs past the data", z.Name, h, w)
 			}
 			z.Matrix = make([][]int, h)

@@ -231,6 +231,9 @@ func run(args []string) error {
 		return err
 	}
 
+	if err := checkRun(*fps, *smooth, *gain); err != nil {
+		return err
+	}
 	cs, err := bars.ParseColours(*colours)
 	if err != nil {
 		return err
@@ -307,7 +310,14 @@ func run(args []string) error {
 	if cerr := r.Clear(); err == nil {
 		err = cerr
 	}
-	if err == nil {
+	// stop cava and wait for it, so its error (a crash, say) isn't lost;
+	// a read from stdin can't be stopped, so only take its error if it's there
+	stop()
+	if !*stdin {
+		if serr := <-srcErr; err == nil {
+			err = serr
+		}
+	} else if err == nil {
 		select {
 		case err = <-srcErr:
 		default:
@@ -317,6 +327,19 @@ func run(args []string) error {
 		err = nil
 	}
 	return err
+}
+
+// checkRun rejects settings cava or the bars can't use.
+func checkRun(fps, smooth int, gain float64) error {
+	switch {
+	case fps < 1:
+		return fmt.Errorf("-fps %d: want 1 or more", fps)
+	case smooth < 0 || smooth > 100:
+		return fmt.Errorf("-smooth %d: want 0-100", smooth)
+	case gain <= 0:
+		return fmt.Errorf("-gain %g: want more than 0", gain)
+	}
+	return nil
 }
 
 // stats counts what paint did, for -v.
@@ -485,7 +508,7 @@ func find(args []string) error {
 	fl := flag.NewFlagSet("keybars find", flag.ContinueOnError)
 	cf := connFlags(fl)
 	from := fl.Int("from", -1, "first key index (default: 1 on Keymapp, which never lights 0, else 0)")
-	to := fl.Int("to", 0, "last key index (default: until the keyboard has no more)")
+	to := fl.Int("to", -1, "last key index (default: until the keyboard has no more)")
 	auto := fl.Duration("auto", 0, "step on a timer instead of waiting for Enter")
 	if err := fl.Parse(args); err != nil {
 		return err
@@ -524,7 +547,7 @@ func find(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	in := bufio.NewReader(os.Stdin)
-	for led := *from; *to == 0 || led <= *to; led++ {
+	for led := *from; *to < 0 || led <= *to; led++ {
 		if err := set(led, white); err != nil {
 			fmt.Printf("no LED %d: done\n", led)
 			return nil
@@ -680,10 +703,17 @@ func gen(args []string) error {
 	return g.Format(os.Stdout, header...)
 }
 
+// qmkClient fetches keyboard definitions; the timeout keeps gen from hanging.
+var qmkClient = &http.Client{Timeout: 15 * time.Second}
+
 func readQMK(src string) (qmk.Keyboard, error) {
-	if f, err := os.Open(src); err == nil {
+	f, err := os.Open(src)
+	if err == nil {
 		defer f.Close()
 		return qmk.Parse(f)
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return qmk.Keyboard{}, err
 	}
 	var errs []error
 	// QMK's API has the merged definition, which variants inherit; the raw
@@ -693,9 +723,10 @@ func readQMK(src string) (qmk.Keyboard, error) {
 		urls = append(urls, qmkRaw+strings.Trim(src, "/")+"/"+file)
 	}
 	for _, url := range urls {
-		resp, err := http.Get(url)
+		resp, err := qmkClient.Get(url)
 		if err != nil {
-			return qmk.Keyboard{}, err
+			errs = append(errs, err)
+			continue
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()

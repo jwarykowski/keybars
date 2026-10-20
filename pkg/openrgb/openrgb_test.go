@@ -20,12 +20,14 @@ import (
 // "Rainbow Wave".
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
-	b, err := os.ReadFile("testdata/" + name)
+	b, err := readFixture(name)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return b
 }
+
+func readFixture(name string) ([]byte, error) { return os.ReadFile("testdata/" + name) }
 
 func TestParseController(t *testing.T) {
 	ctl, err := ParseController(fixture(t, "controller_v1.bin"), 1)

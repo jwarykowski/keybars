@@ -33,3 +33,42 @@ func TestField(t *testing.T) {
 		t.Error("truncated message: want not found")
 	}
 }
+
+func TestFieldMalformed(t *testing.T) {
+	name := append([]byte{0x0a, 3}, "abc"...)
+	tests := []struct {
+		name   string
+		msg    []byte
+		n      int
+		want   []byte
+		wantOK bool
+	}{
+		{"skips varints", append([]byte{0x08, 0x96, 0x01}, name...), 1, []byte("abc"), true},
+		{"empty value", []byte{0x0a, 0}, 1, []byte{}, true},
+		{"absent", name, 2, nil, false},
+		{"empty message", nil, 1, nil, false},
+		{"length past the end", []byte{0x0a, 9, 'a'}, 1, nil, false},
+		{"huge length", []byte{0x0a, 0xff, 0xff, 0xff, 0xff, 0x0f}, 1, nil, false},
+		{"truncated varint", []byte{0x08, 0x80}, 1, nil, false},
+		{"unterminated tag", []byte{0x80, 0x80}, 1, nil, false},
+		{"fixed64 unsupported", []byte{0x09, 0, 0, 0, 0, 0, 0, 0, 0}, 1, nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := field(tt.msg, tt.n)
+			if ok != tt.wantOK || !bytes.Equal(got, tt.want) {
+				t.Errorf("field(% x, %d) = %q, %v; want %q, %v", tt.msg, tt.n, got, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
+}
+
+func FuzzField(f *testing.F) {
+	f.Add([]byte{0x0a, 3, 'a', 'b', 'c'}, 1)
+	f.Add([]byte{0x08, 0x96, 0x01, 0x12, 0}, 2)
+	f.Fuzz(func(t *testing.T, b []byte, n int) {
+		if v, ok := field(b, n); ok && len(v) > len(b) {
+			t.Errorf("field returned %d bytes from %d", len(v), len(b))
+		}
+	})
+}

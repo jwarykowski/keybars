@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/jwarykowski/keybars/pkg/rgb"
 	"google.golang.org/grpc"
@@ -24,6 +25,9 @@ type Colour = rgb.Colour
 
 // LEDs is what the renderer needs from a keyboard.
 type LEDs = rgb.LEDs
+
+// timeout bounds every call, so a stalled Keymapp can't hang keybars.
+const timeout = 5 * time.Second
 
 // Client is a connection to Keymapp.
 type Client struct {
@@ -115,8 +119,10 @@ func (c *Client) call(method string, req []byte) error {
 
 // invoke calls a KeyboardService method and returns the encoded reply.
 func (c *Client) invoke(method string, req []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	var reply []byte
-	err := c.conn.Invoke(context.Background(), "/api.KeyboardService/"+method, &req, &reply)
+	err := c.conn.Invoke(ctx, "/api.KeyboardService/"+method, &req, &reply)
 	return reply, err
 }
 
