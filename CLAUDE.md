@@ -14,6 +14,12 @@ working here.
   socket (`hardware_test.go`) and a fake OpenRGB server (`openrgb_test.go`).
   `start`'s tests run the test binary itself as keybars (`TestMain`), with
   a fake `cava` on PATH.
+- `scripts/openrgb-check.sh` runs `TestLiveOpenRGB` against a real OpenRGB
+  server's debug keyboards (needs OpenRGB; `OPENRGB=path`). Run it after
+  changing the OpenRGB backend or map choice.
+- Device descriptions saved with `keybars maps -backend openrgb -save` go in
+  `pkg/openrgb/testdata/devices/` (`<index>-<name>.v<protocol>.bin`), where
+  `TestDevices` reads them.
 - After any dependency change: `scripts/notices.sh`. CI fails if
   THIRD_PARTY_NOTICES.md is stale (Dependabot PRs need this too).
 - `scripts/maps.sh` regenerates the QMK maps and `maps/shapes.json` from
@@ -43,5 +49,9 @@ working here.
 
 - Keymapp's LED order differs from the firmware's: this CLI uses Keymapp's;
   keybars Pro drives firmware order and keeps its own maps for that.
+- On OpenRGB, a board in `maps/qmk/boards.json` gets keybars' map over
+  OpenRGB's matrix when its LED count matches (counts come from
+  `shapes.json`, which `scripts/maps.sh` writes). `TestBarsStandStraight`
+  checks every map's bars against the board's shape.
 - A map that can't be verified (ErgoDox EZ: thumbs not on their own matrix
   row) is left out rather than shipped wrong.

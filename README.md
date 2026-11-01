@@ -167,9 +167,15 @@ number row on ZSA boards. `keybars maps -backend openrgb` lists the devices
 and prints that map, to save and edit for `-map`. For a keyboard without a
 matrix, `keybars find -backend openrgb` lights LEDs from index 0 with their
 OpenRGB names. When OpenRGB rescans its devices, or the keyboard is
-unplugged and plugged back in, keybars finds it again and carries on. The
-OpenRGB backend is tested against a simulated server, not yet a real
-keyboard, so reports are welcome.
+unplugged and plugged back in, keybars finds it again and carries on.
+
+The OpenRGB backend is tested against OpenRGB 1.0 itself, with its debug
+keyboards ([`scripts/openrgb-check.sh`](scripts/openrgb-check.sh)), but not
+yet on a real keyboard, so reports are welcome:
+[open a keyboard report](https://github.com/jwarykowski/keybars/issues/new?template=keyboard.yml),
+and attach what `keybars maps -backend openrgb -save keybars-devices` saves
+(each device's description from OpenRGB, serial numbers masked), which
+becomes a test.
 
 ## macOS audio
 
@@ -221,14 +227,19 @@ uses (matched on the name Keymapp reports). The Moonlander and Voyager maps
 are tested on real boards, and `keybars gen` reproduces both from QMK; the
 Planck EZ's is generated the same way.
 
-For OpenRGB keyboards that don't report their key matrix, keybars also has
-maps generated from QMK, in the firmware's LED order, for 21 popular boards:
+For QMK keyboards through OpenRGB, keybars also has maps generated from QMK,
+in the firmware's LED order, for 21 popular boards:
 Keychron's Q1, Q2, Q3, Q5, Q6, Q60, Q65, V1, V3, V6 and V10, the GMMK Pro and
 GMMK 2 (65% and 96%), Drop's CTRL and ALT, the KBD67 MkII RGB, Corne, Sofle,
-Kyria and Lulu ([`maps/qmk`](maps/qmk)). One is used when the name OpenRGB
-reports matches a board in [`boards.json`](maps/qmk/boards.json) exactly.
-They suit boards whose QMK firmware talks to OpenRGB directly; they haven't
-been checked on the boards themselves, so `keybars test` is worth a run.
+Kyria and Lulu ([`maps/qmk`](maps/qmk)). OpenRGB reaches one only when its
+firmware speaks VialRGB (Vial) or the QMK-OpenRGB protocol, which stock
+firmware usually doesn't. keybars uses its map when the name OpenRGB reports
+matches a board in [`boards.json`](maps/qmk/boards.json) exactly and the LED
+count is QMK's, in place of OpenRGB's own matrix: for these boards that
+follows the wiring (VialRGB) or rows of LED positions (QMK-OpenRGB), which
+can lean the bars or stack a split board's halves. Each map's bars are
+checked against the board's shape in tests; they haven't been tried on the
+boards themselves, so `keybars test` is worth a run.
 [`scripts/maps.sh`](scripts/maps.sh) regenerates them all, with each board's
 shape (every key's place and size) in [`maps/shapes.json`](maps/shapes.json)
 for previews.

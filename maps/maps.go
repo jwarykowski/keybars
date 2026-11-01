@@ -20,6 +20,9 @@ var FS embed.FS
 //go:embed qmk
 var qmkFS embed.FS
 
+//go:embed shapes.json
+var shapes []byte
+
 // QMK holds the maps generated from QMK, one <id>.txt each.
 var QMK = func() fs.FS {
 	sub, err := fs.Sub(qmkFS, "qmk")
@@ -30,12 +33,14 @@ var QMK = func() fs.FS {
 }()
 
 // Board is a keyboard with a map from QMK: its map's ID, its name, its path
-// in QMK's keyboards, and the names a keyboard might report for it.
+// in QMK's keyboards, the names a keyboard might report for it, and how many
+// LEDs its firmware has.
 type Board struct {
 	ID    string   `json:"id"`
 	Name  string   `json:"name"`
 	QMK   string   `json:"qmk"`
 	Match []string `json:"match"`
+	LEDs  int      `json:"-"`
 }
 
 // Boards lists the keyboards with a map from QMK.
@@ -47,6 +52,20 @@ func Boards() []Board {
 	var out []Board
 	if err := json.Unmarshal(b, &out); err != nil {
 		panic(err)
+	}
+	var sh []struct {
+		ID   string `json:"id"`
+		LEDs int    `json:"leds"`
+	}
+	if err := json.Unmarshal(shapes, &sh); err != nil {
+		panic(err)
+	}
+	for i := range out {
+		for _, s := range sh {
+			if s.ID == out[i].ID {
+				out[i].LEDs = s.LEDs
+			}
+		}
 	}
 	return out
 }

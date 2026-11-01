@@ -140,7 +140,8 @@ func TestOpenRGBMaps(t *testing.T) {
 		wantErr string
 	}{
 		{"the device's key matrix", testKeyboard(t), nil, ""},
-		{"QMK's map for a board OpenRGB gives none for", noMatrix("Corne", 60), nil, ""},
+		{"QMK's map for a board keybars knows", noMatrix("Corne", 54), nil, ""},
+		{"a board that isn't the one QMK describes", noMatrix("Corne", 60), nil, "Corne has 60 LEDs, QMK's Corne has 54"},
 		{"no map at all", noMatrix("Mystery 9000", 10), nil, "OpenRGB gives no key matrix for Mystery 9000"},
 		{"a Keymapp model", testKeyboard(t), []string{"-model", "planck"}, "-model maps are Keymapp's numbering"},
 	}
@@ -190,5 +191,28 @@ func TestFindOpenRGB(t *testing.T) {
 		if !strings.Contains(out, w) {
 			t.Errorf("output lacks %q:\n%s", w, out)
 		}
+	}
+}
+
+func TestSaveDescriptions(t *testing.T) {
+	addr, _ := fakeOpenRGB(t, testKeyboard(t), noMatrix("Mystery 9000!", 10))
+	dir := filepath.Join(t.TempDir(), "devices")
+	out, err := stdout(t, func() error {
+		return listMaps([]string{"-backend", "openrgb", "-openrgb", addr, "-save", dir})
+	})
+	if err != nil || !strings.Contains(out, "saved 2 descriptions") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	for _, name := range []string{"0-test-keyboard.v1.bin", "1-mystery-9000.v1.bin"} {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(b), "SN1") {
+			t.Errorf("%s keeps the serial number", name)
+		}
+	}
+	if err := listMaps([]string{"-save", dir}); err == nil || !strings.Contains(err.Error(), "-backend openrgb") {
+		t.Errorf("-save with Keymapp: %v", err)
 	}
 }

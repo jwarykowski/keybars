@@ -122,6 +122,9 @@ func Dial(addr string) (*Client, error) {
 // Close closes the connection.
 func (c *Client) Close() error { return c.conn.Close() }
 
+// Version is the protocol version agreed with the server.
+func (c *Client) Version() uint32 { return c.version }
+
 // Controllers describes every device the server has.
 func (c *Client) Controllers() ([]Controller, error) {
 	c.changed.Store(false)
@@ -150,7 +153,7 @@ func (c *Client) Controllers() ([]Controller, error) {
 		if err != nil {
 			return nil, fmt.Errorf("openrgb device %d: %w", i, err)
 		}
-		ctl.Index = i
+		ctl.Index, ctl.raw = i, reply
 		out = append(out, ctl)
 	}
 	return out, nil

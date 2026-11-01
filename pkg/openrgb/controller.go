@@ -21,6 +21,9 @@ type Controller struct {
 	Zones      []Zone
 	LEDs       []string // LED names, in device order
 	Colours    []rgb.Colour
+
+	raw    []byte // the description as the server sent it
+	serial [2]int // where Serial is in raw
 }
 
 // Mode is one of a device's lighting modes; raw is its description as sent,
@@ -64,7 +67,9 @@ func ParseController(b []byte, version uint32) (ctl Controller, err error) {
 	}
 	r.str() // description
 	r.str() // version
+	at := r.off + 2
 	ctl.Serial = r.str()
+	ctl.serial = [2]int{at, r.off}
 	ctl.Location = r.str()
 	nModes := r.u16()
 	ctl.ActiveMode = r.i32()
@@ -126,6 +131,18 @@ func ParseController(b []byte, version uint32) (ctl Controller, err error) {
 		return ctl, fmt.Errorf("%d colours for %d LEDs", len(ctl.Colours), len(ctl.LEDs))
 	}
 	return ctl, nil
+}
+
+// Raw is the description as the server sent it, with the serial number
+// masked so it can be shared.
+func (ctl Controller) Raw() []byte {
+	b := append([]byte(nil), ctl.raw...)
+	for i := ctl.serial[0]; i < ctl.serial[1] && i < len(b); i++ {
+		if b[i] != 0 {
+			b[i] = 'x'
+		}
+	}
+	return b
 }
 
 // Map is the controller's keys as a keybars grid, Cells[row][column] with -1

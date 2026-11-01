@@ -290,6 +290,7 @@ type Shape struct {
 	Height float64    `json:"height"`
 	Rows   int        `json:"rows"`
 	Cols   int        `json:"cols"`
+	LEDs   int        `json:"leds"` // every LED rgb_matrix has, under a key or not
 	Keys   []ShapeKey `json:"keys"`
 }
 
@@ -312,7 +313,7 @@ func (kb Keyboard) Shape(o Options) (Shape, error) {
 		return Shape{}, err
 	}
 	keys, _ := kb.layout(o.Layout)
-	sh := Shape{Name: kb.Name, Rows: len(g.Cells)}
+	sh := Shape{Name: kb.Name, Rows: len(g.Cells), LEDs: len(kb.RGBMatrix.Layout)}
 	if sh.Rows > 0 {
 		sh.Cols = len(g.Cells[0])
 	}

@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -189,17 +190,24 @@ func loadMap(c common, kb keyboard) (layout.Map, error) {
 	return layout.Load(maps, model)
 }
 
-// openrgbMap is the map from an OpenRGB device's key matrix.
+// openrgbMap is the map for an OpenRGB device. A QMK board keybars has a
+// map for gets that map, in the firmware's LED order as OpenRGB numbers it,
+// when its LED count matches: OpenRGB's own matrix for a QMK board follows
+// its wiring (VialRGB) or rows of LED positions (QMK-OpenRGB), which can
+// lean the bars or stack a split board's halves. Other devices use OpenRGB's
+// key matrix.
 func openrgbMap(d *openrgb.Device) (layout.Map, error) {
 	name, _ := d.Keyboard()
+	if b, ok := builtin.MatchQMK(name); ok {
+		if n := len(d.Controller().LEDs); n == b.LEDs {
+			fmt.Fprintf(os.Stderr, "keybars: using the map from QMK for %s (keybars test checks it)\n", b.Name)
+			return layout.Load(builtin.QMK, b.ID)
+		} else if _, matrix := d.Map(); !matrix {
+			return layout.Map{}, fmt.Errorf("%s has %d LEDs, QMK's %s has %d: write a map with `keybars find -backend openrgb` and pass -map FILE", name, n, b.Name, b.LEDs)
+		}
+	}
 	cells, ok := d.Map()
 	if !ok {
-		// QMK's map for the board, in the firmware's LED order, which is
-		// OpenRGB's for a QMK board that talks to it directly
-		if b, ok := builtin.MatchQMK(name); ok {
-			fmt.Fprintf(os.Stderr, "keybars: OpenRGB gives no key matrix for %s; using the map from QMK (untested on this board: keybars test checks it)\n", name)
-			return layout.Load(builtin.QMK, b.ID)
-		}
 		return layout.Map{}, fmt.Errorf("OpenRGB gives no key matrix for %s: write a map with `keybars find -backend openrgb` and pass -map FILE", name)
 	}
 	return layout.FromCells(name, cells)
@@ -597,11 +605,15 @@ func pastLast(kb keyboard, err error) bool {
 func listMaps(args []string) error {
 	fl := flag.NewFlagSet("keybars maps", flag.ContinueOnError)
 	cf := connFlags(fl)
+	save := fl.String("save", "", "with -backend openrgb, also save each device's description in this directory, to attach to a report")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
 	if *cf.backend == "openrgb" {
-		return listOpenRGB(cf)
+		return listOpenRGB(cf, *save)
+	}
+	if *save != "" {
+		return errors.New("-save is for -backend openrgb")
 	}
 	for _, n := range layout.Builtin(maps) {
 		m, err := layout.Load(maps, n)
@@ -627,9 +639,10 @@ func listMaps(args []string) error {
 	return nil
 }
 
-// listOpenRGB lists OpenRGB's devices, then prints the map keybars would use
-// for the chosen one, ready to save and edit for -map.
-func listOpenRGB(cf conn) error {
+// listOpenRGB lists OpenRGB's devices, saving their descriptions in save
+// when it's set, then prints the map keybars would use for the chosen one,
+// ready to save and edit for -map.
+func listOpenRGB(cf conn, save string) error {
 	client, err := openrgb.Dial(*cf.addr)
 	if err != nil {
 		return err
@@ -646,6 +659,12 @@ func listOpenRGB(cf conn) error {
 		}
 		fmt.Printf("%-3d %s: %d LEDs, %s\n", ctl.Index, ctl.Name, len(ctl.LEDs), matrix)
 	}
+	if save != "" {
+		if err := saveDescriptions(save, ctls, client.Version()); err != nil {
+			return err
+		}
+		fmt.Printf("\nsaved %d descriptions in %s (serial numbers masked)\n", len(ctls), save)
+	}
 	d, err := client.Open(*cf.device)
 	if err != nil {
 		return err
@@ -660,6 +679,37 @@ func listOpenRGB(cf conn) error {
 	return qmk.Grid{Cells: cells}.Format(os.Stdout,
 		name+": OpenRGB's LED index for each key, rows top to bottom.",
 		"From its key matrix; save and edit it to use with -map.")
+}
+
+// saveDescriptions writes each device's description to dir as
+// <index>-<name>.v<protocol>.bin, the form the openrgb package's tests read.
+func saveDescriptions(dir string, ctls []openrgb.Controller, version uint32) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for _, ctl := range ctls {
+		name := fmt.Sprintf("%d-%s.v%d.bin", ctl.Index, slug(ctl.Name), version)
+		if err := os.WriteFile(filepath.Join(dir, name), ctl.Raw(), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// slug is s in lower case with each run of other characters as one dash.
+func slug(s string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(s) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+			dash = false
+		} else if !dash && b.Len() > 0 {
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	return strings.TrimSuffix(b.String(), "-")
 }
 
 // qmkRaw is where gen fetches keyboard definitions named rather than given

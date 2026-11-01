@@ -1,0 +1,64 @@
+name: Keyboard report
+description: How keybars works, or doesn't, on your keyboard
+title: "Keyboard: "
+labels: [keyboard]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying keybars on your board. Reports that it works are as useful as ones that it doesn't: they go on the list of tested keyboards.
+  - type: input
+    id: keyboard
+    attributes:
+      label: Keyboard
+      description: Make and model, and its firmware if you know it (stock, QMK, Vial, QMK-OpenRGB)
+      placeholder: Keychron Q1 Pro, stock firmware
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options:
+        - OpenRGB
+        - Keymapp (ZSA)
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "`keybars version`, your OS, and OpenRGB's version (Help > About) if you use it"
+      placeholder: keybars v0.5.4, Fedora 44, OpenRGB 1.0rc2
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: What does `keybars test` do?
+      options:
+        - Sweeps every column, then every row, cleanly
+        - Some keys are out of line or never light
+        - Nothing lights
+        - It fails with an error
+    validations:
+      required: true
+  - type: textarea
+    id: maps
+    attributes:
+      label: Output of `keybars maps` (add `-backend openrgb` for OpenRGB)
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: fps
+    attributes:
+      label: Frame rate
+      description: The fps `keybars -v` prints when you stop it with Ctrl-C, after some music
+      placeholder: 30.0 fps
+  - type: textarea
+    id: details
+    attributes:
+      label: Anything else
+      description: |
+        For OpenRGB, `keybars maps -backend openrgb -save keybars-devices` saves what OpenRGB tells keybars about each device (serial numbers masked). Zip the folder and drop it here: it becomes a test, so your keyboard keeps working.

@@ -3,10 +3,14 @@ package openrgb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -484,5 +488,64 @@ func TestLateReplyIsDropped(t *testing.T) {
 	data, err := c.request(0, requestControllerCount, nil, time.Second)
 	if err != nil || binary.LittleEndian.Uint32(data) != 1 {
 		t.Fatalf("got %v, %v; want the fresh reply, 1", data, err)
+	}
+}
+
+// TestDevices reads every description saved with keybars maps -save, from
+// real servers: <index>-<name>.v<protocol>.bin.
+func TestDevices(t *testing.T) {
+	files, err := filepath.Glob("testdata/devices/*.bin")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no saved descriptions: %v", err)
+	}
+	for _, f := range files {
+		t.Run(filepath.Base(f), func(t *testing.T) {
+			var version uint32
+			if _, err := fmt.Sscanf(f[strings.LastIndex(f, ".v")+2:], "%d.bin", &version); err != nil {
+				t.Fatalf("no protocol version in the name: %v", err)
+			}
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctl, err := ParseController(b, version)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ctl.LEDs) == 0 {
+				t.Error("no LEDs")
+			}
+			if !slices.ContainsFunc(ctl.Modes, func(m Mode) bool { return m.Flags&flagPerLED != 0 }) {
+				t.Error("no per-LED mode")
+			}
+			if cells, ok := ctl.Map(); ok {
+				for _, row := range cells {
+					for _, led := range row {
+						if led >= len(ctl.LEDs) {
+							t.Errorf("matrix has LED %d of %d", led, len(ctl.LEDs))
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestRawMasksSerial(t *testing.T) {
+	b := fixture(t, "controller_v1.bin")
+	ctl, err := ParseController(b, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctl.raw = b
+	again, err := ParseController(ctl.Raw(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Serial != strings.Repeat("x", len(ctl.Serial)) || again.Name != ctl.Name || len(again.LEDs) != len(ctl.LEDs) {
+		t.Errorf("masked: serial %q, name %q, %d LEDs", again.Serial, again.Name, len(again.LEDs))
+	}
+	if !bytes.Equal(b, fixture(t, "controller_v1.bin")) {
+		t.Error("Raw changed the description it was read from")
 	}
 }
