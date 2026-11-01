@@ -11,7 +11,9 @@ working here.
 - `go vet ./...`, `go test -race ./...` (CI races too), with
   `GOTOOLCHAIN=auto`.
 - Tests must not need a keyboard: the commands' tests drive a fake Keymapp
-  socket (`hardware_test.go`).
+  socket (`hardware_test.go`) and a fake OpenRGB server (`openrgb_test.go`).
+  `start`'s tests run the test binary itself as keybars (`TestMain`), with
+  a fake `cava` on PATH.
 - After any dependency change: `scripts/notices.sh`. CI fails if
   THIRD_PARTY_NOTICES.md is stale (Dependabot PRs need this too).
 - `scripts/maps.sh` regenerates the QMK maps and `maps/shapes.json` from

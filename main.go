@@ -472,8 +472,9 @@ func test(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	var failed error
 	show := func(heights []int) bool {
-		if _, err := r.Frame(heights, nil); err != nil {
+		if _, failed = r.Frame(heights, nil); failed != nil {
 			return false
 		}
 		select {
@@ -488,7 +489,7 @@ func test(args []string) error {
 		h := make([]int, grid.Columns())
 		h[x] = grid.Height
 		if !show(h) {
-			return nil
+			return failed
 		}
 	}
 	for level := 1; level <= grid.Height; level++ {
@@ -497,7 +498,7 @@ func test(args []string) error {
 			h[x] = level
 		}
 		if !show(h) {
-			return nil
+			return failed
 		}
 	}
 	return nil
@@ -549,6 +550,9 @@ func find(args []string) error {
 	in := bufio.NewReader(os.Stdin)
 	for led := *from; *to < 0 || led <= *to; led++ {
 		if err := set(led, white); err != nil {
+			if !pastLast(client, err) {
+				return err
+			}
 			fmt.Printf("no LED %d: done\n", led)
 			return nil
 		}
@@ -574,6 +578,20 @@ func find(args []string) error {
 		}
 	}
 	return nil
+}
+
+// pastLast reports whether err from lighting an LED means the keyboard has
+// no more, rather than that it has gone: Keymapp says only that the call
+// failed, so it asks whether the keyboard is still there.
+func pastLast(kb keyboard, err error) bool {
+	if errors.Is(err, openrgb.ErrNoLED) {
+		return true
+	}
+	if _, ok := kb.(*openrgb.Device); ok {
+		return false
+	}
+	_, kerr := kb.Keyboard()
+	return kerr == nil
 }
 
 func listMaps(args []string) error {

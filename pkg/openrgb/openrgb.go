@@ -68,7 +68,13 @@ const maxPacket = 16 << 20
 // timeout bounds every request, so a stalled server can't hang keybars.
 const timeout = 5 * time.Second
 
+// maxDevices is the most devices believed; more is a broken or hostile server.
+const maxDevices = 1024
+
 var errNoReply = errors.New("openrgb: no reply")
+
+// ErrNoLED is Set's error for an LED the device doesn't have.
+var ErrNoLED = errors.New("no such LED")
 
 // Client is a connection to an OpenRGB SDK server.
 type Client struct {
@@ -127,6 +133,9 @@ func (c *Client) Controllers() ([]Controller, error) {
 		return nil, errors.New("openrgb: short controller count")
 	}
 	n := binary.LittleEndian.Uint32(reply)
+	if n > maxDevices {
+		return nil, fmt.Errorf("openrgb: server reports %d devices", n)
+	}
 	out := make([]Controller, 0, n)
 	for i := range n {
 		var data []byte
@@ -298,7 +307,7 @@ func (d *Device) Close() error { return d.c.Close() }
 // Set buffers one LED's colour until Flush.
 func (d *Device) Set(led int, col rgb.Colour) error {
 	if led < 0 || led >= len(d.ctl.LEDs) {
-		return fmt.Errorf("openrgb: %s has no LED %d", d.ctl.Name, led)
+		return fmt.Errorf("openrgb: %s: %w %d", d.ctl.Name, ErrNoLED, led)
 	}
 	if err := d.enterDirect(); err != nil {
 		return err

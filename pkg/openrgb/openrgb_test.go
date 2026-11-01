@@ -95,6 +95,7 @@ type packet struct {
 type fakeServer struct {
 	mu    sync.Mutex
 	descs [][]byte
+	count uint32 // the device count it reports, if not len(descs)
 	conn  net.Conn
 }
 
@@ -138,7 +139,7 @@ func fake(t *testing.T, silent bool, descs ...[]byte) (*fakeServer, string, <-ch
 				return
 			}
 			f.mu.Lock()
-			descs := f.descs
+			descs, count := f.descs, f.count
 			f.mu.Unlock()
 			switch p.id {
 			case requestProtocolVersion:
@@ -146,7 +147,10 @@ func fake(t *testing.T, silent bool, descs ...[]byte) (*fakeServer, string, <-ch
 					reply(p.id, u32(4))
 				}
 			case requestControllerCount:
-				reply(p.id, u32(uint32(len(descs))))
+				if count == 0 {
+					count = uint32(len(descs))
+				}
+				reply(p.id, u32(count))
 			case requestControllerData:
 				reply(p.id, descs[p.dev])
 			default:

@@ -65,7 +65,7 @@ brews:
         base:
           branch: main
     directory: Formula
-    homepage: https://jwarykowski.dev/projects/keybars/
+    homepage: https://keybars.app/
     description: Music equaliser on your keyboard's backlight
     license: MIT
     dependencies:

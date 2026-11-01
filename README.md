@@ -100,8 +100,9 @@ keybars stop                 # hand the keys back to the layout and exit
 isn't running, `start` prints the error instead.
 
 To start it at login on macOS, save this as
-`~/Library/LaunchAgents/dev.jwarykowski.keybars.plist`, with the path to your
-keybars:
+`~/Library/LaunchAgents/dev.jwarykowski.keybars.plist`, with the path
+`which keybars` prints (`/opt/homebrew/bin/keybars` from Homebrew on Apple
+silicon, `~/go/bin/keybars` from `go install`):
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -110,7 +111,7 @@ keybars:
 <dict>
   <key>Label</key><string>dev.jwarykowski.keybars</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/you/go/bin/keybars</string></array>
+  <array><string>/opt/homebrew/bin/keybars</string></array>
   <key>EnvironmentVariables</key>
   <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin</string></dict>
   <key>RunAtLoad</key><true/>
@@ -127,7 +128,8 @@ it again every 10 seconds until they're back, so set Keymapp to open at login
 too. `PATH` is there so launchd finds cava.
 
 On Linux, a systemd user unit does the same, in
-`~/.config/systemd/user/keybars.service`:
+`~/.config/systemd/user/keybars.service`, again with the path `which keybars`
+prints (`/home/linuxbrew/.linuxbrew/bin/keybars` from Homebrew):
 
 ```ini
 [Unit]

@@ -2,10 +2,13 @@ package openrgb
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"strings"
 	"testing"
+
+	"github.com/jwarykowski/keybars/pkg/rgb"
 )
 
 // rogue accepts one client and answers its first packet with reply, then
@@ -113,4 +116,37 @@ func FuzzParseController(f *testing.F) {
 			ctl.Map()
 		}
 	})
+}
+
+func TestControllersRejectsHugeCount(t *testing.T) {
+	f, addr, _ := fake(t, false, fixture(t, "controller_v1.bin"))
+	f.mu.Lock()
+	f.count = 0xFFFFFFFF
+	f.mu.Unlock()
+	c, err := Dial(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Controllers(); err == nil || !strings.Contains(err.Error(), "4294967295 devices") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestSetUnknownLED(t *testing.T) {
+	addr, _ := server(t, fixture(t, "controller_v1.bin"), false)
+	c, err := Dial(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	d, err := c.Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, led := range []int{-1, 11} {
+		if err := d.Set(led, rgb.Colour{}); !errors.Is(err, ErrNoLED) {
+			t.Errorf("Set(%d): %v, want ErrNoLED", led, err)
+		}
+	}
 }

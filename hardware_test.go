@@ -238,3 +238,21 @@ func TestListMaps(t *testing.T) {
 		})
 	}
 }
+
+func TestTestReportsKeyboardErrors(t *testing.T) {
+	sock, _ := fakeKeymapp(t, "Planck EZ", 0) // no LED lights
+	_, err := stdout(t, func() error { return test([]string{"-socket", sock, "-step", "1ms"}) })
+	if err == nil || !strings.Contains(err.Error(), "keymapp reported failure") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestFindKeyboardGone(t *testing.T) {
+	// LED 3 fails with no keyboard connected: that's the keyboard gone, not
+	// the end of its LEDs
+	sock, _ := fakeKeymapp(t, "", 2)
+	out, err := stdout(t, func() error { return find([]string{"-socket", sock, "-auto", "1ms"}) })
+	if err == nil || !strings.Contains(err.Error(), "keymapp reported failure") || strings.Contains(out, "done") {
+		t.Errorf("err = %v, output:\n%s", err, out)
+	}
+}
