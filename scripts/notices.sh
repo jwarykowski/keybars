@@ -50,4 +50,16 @@ fi
 			printf '\n```\n'
 		done
 	done
+
+	# the standard library and runtime in every binary: Go's licence, the same
+	# text as golang.org/x/sys's, taken from there so every machine writes it
+	# alike (some Go packages leave it out)
+	printf '\n## Go, its standard library and runtime\n\n### LICENSE\n\n```\n'
+	cat "$(go list -m -f '{{.Dir}}' golang.org/x/sys)/LICENSE"
+	printf '\n```\n'
+
+	printf '\n## Keyboard maps from QMK Firmware\n\n'
+	printf 'The maps in maps/qmk, and the ones keybars gen writes, are generated from\n'
+	printf 'the keyboard definitions in QMK Firmware, https://github.com/qmk/qmk_firmware,\n'
+	printf 'which is licensed under the GNU General Public License, version 2 or later.\n'
 } >"$out"
