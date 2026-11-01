@@ -281,6 +281,12 @@ the formula. It needs a `GH_RELEASE_TOKEN` secret with write access to the tap.
 
 ## Support
 
+Bugs, questions and new keyboard maps are welcome as
+[GitHub issues](https://github.com/jwarykowski/keybars/issues) and pull
+requests. GitHub is a mirror, so a merged pull request lands through the main
+repository at [code.warykowski.io](https://code.warykowski.io/jwarykowski/keybars),
+with your name on the commit.
+
 keybars is free and MIT licensed. If it makes your desk a bit more fun, you
 can [sponsor its development](https://github.com/sponsors/jwarykowski).
 

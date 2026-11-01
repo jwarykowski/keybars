@@ -21,6 +21,13 @@ working here.
 - Keep `pkg/` free of anything Pro-only: nothing moves from this repo into
   Pro, and the CLI stays free.
 
+## Issues and pull requests
+
+- Issues and outside pull requests come in on the GitHub mirror (Forgejo
+  has registration off). Apply a GitHub PR on Forgejo with its author kept
+  (`git am` of the PR's `.patch`), then close it on GitHub with a link;
+  never merge on GitHub, since the next mirror push overwrites it.
+
 ## Releasing
 
 - Push an annotated `vX.Y.Z` tag on `main`. The release workflow runs on the
