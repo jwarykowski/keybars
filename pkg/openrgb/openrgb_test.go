@@ -549,3 +549,38 @@ func TestRawMasksSerial(t *testing.T) {
 		t.Error("Raw changed the description it was read from")
 	}
 }
+
+func TestParseControllerRejects(t *testing.T) {
+	b := fixture(t, "controller_v1.bin")
+	if _, err := ParseController(b, 2); err == nil || !strings.Contains(err.Error(), "version 2") {
+		t.Errorf("protocol 2: %v", err)
+	}
+	wrong := append([]byte(nil), b...)
+	binary.LittleEndian.PutUint32(wrong, uint32(len(b)+1))
+	if _, err := ParseController(wrong, 1); err == nil || !strings.Contains(err.Error(), "bytes") {
+		t.Errorf("wrong size: %v", err)
+	}
+}
+
+func TestDeviceEdges(t *testing.T) {
+	addr, _ := server(t, fixture(t, "controller_v1.bin"), false)
+	c, err := Dial(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	d, err := c.Open("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := d.Name(-1); n != "" {
+		t.Errorf("Name(-1) = %q", n)
+	}
+	if n := d.Name(len(d.Controller().LEDs)); n != "" {
+		t.Errorf("Name past the last LED = %q", n)
+	}
+	// nothing was taken over, so there's nothing to put back
+	if err := d.RestoreAll(); err != nil {
+		t.Errorf("RestoreAll before any Set: %v", err)
+	}
+}

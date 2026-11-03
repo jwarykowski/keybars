@@ -189,3 +189,20 @@ func TestSocketPath(t *testing.T) {
 		t.Errorf("default: %q, %v", p, err)
 	}
 }
+
+func TestSocketPathDefault(t *testing.T) {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Skip("Linux's path")
+	}
+	cfg := t.TempDir()
+	t.Setenv("KEYMAPP_SOCKET", "")
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if p, err := SocketPath(); err != nil || p != filepath.Join(cfg, ".keymapp", "keymapp.sock") {
+		t.Errorf("SocketPath = %q, %v", p, err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "")
+	if _, err := SocketPath(); err == nil {
+		t.Error("without a home: no error")
+	}
+}

@@ -1,6 +1,7 @@
 package bars
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -161,9 +162,10 @@ func TestScale(t *testing.T) {
 type flushing struct {
 	fake
 	flushes int
+	err     error
 }
 
-func (f *flushing) Flush() error { f.flushes++; return nil }
+func (f *flushing) Flush() error { f.flushes++; return f.err }
 
 // A buffering backend is flushed once per frame that changed something.
 func TestFrameFlushesOnce(t *testing.T) {
@@ -185,5 +187,20 @@ func TestFrameFlushesOnce(t *testing.T) {
 		if f.flushes != want {
 			t.Errorf("frame %d: %d flushes, want %d", i, f.flushes, want)
 		}
+	}
+}
+
+func TestParseColoursNotHex(t *testing.T) {
+	if _, err := ParseColours("#gg0000"); err == nil {
+		t.Error("#gg0000: no error")
+	}
+}
+
+func TestFrameFlushError(t *testing.T) {
+	_, _, g := setup(t)
+	f := &flushing{fake: fake{set: map[int]rgb.Colour{}}, err: errors.New("gone")}
+	r := New(g, f, []rgb.Colour{green, red}, nil)
+	if _, err := r.Frame(make([]int, columns), nil); err == nil || err.Error() != "gone" {
+		t.Errorf("err = %v, want the flush's", err)
 	}
 }

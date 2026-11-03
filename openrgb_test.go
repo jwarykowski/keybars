@@ -216,3 +216,24 @@ func TestSaveDescriptions(t *testing.T) {
 		t.Errorf("-save with Keymapp: %v", err)
 	}
 }
+
+func TestConnectOpenRGBErrors(t *testing.T) {
+	addr, _ := fakeOpenRGB(t, testKeyboard(t))
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{"no server", []string{"-openrgb", "127.0.0.1:1"}, "is OpenRGB running"},
+		{"no such device", []string{"-openrgb", addr, "-device", "nothing like it"}, "nothing like it"},
+		{"a model on OpenRGB", []string{"-openrgb", addr, "-model", "planck"}, "-model maps are Keymapp's"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := stdout(t, func() error { return test(append([]string{"-backend", "openrgb", "-step", "1ms"}, tt.args...)) })
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("err = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}

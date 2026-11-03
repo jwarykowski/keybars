@@ -57,8 +57,11 @@ settings from ~/.config/keybars/config, one flag per line ("gain = 2");
 flags on the command line override it.
 `
 
-func main() {
-	cmd, args := "run", os.Args[1:]
+func main() { os.Exit(cli(os.Args[1:])) }
+
+// cli runs the command in args and returns keybars' exit status.
+func cli(args []string) int {
+	cmd := "run"
 	if len(args) > 0 && (!strings.HasPrefix(args[0], "-") || args[0] == "-version" || args[0] == "--version") {
 		cmd, args = strings.TrimLeft(args[0], "-"), args[1:]
 	}
@@ -88,12 +91,13 @@ func main() {
 		fmt.Print(usage)
 	default:
 		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
+		return 2
 	}
 	if err != nil && !errors.Is(err, flag.ErrHelp) {
 		fmt.Fprintln(os.Stderr, "keybars:", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // commands are main's subcommands, for noArgs to spot one after the flags.

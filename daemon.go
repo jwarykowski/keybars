@@ -14,6 +14,9 @@ import (
 	"time"
 )
 
+// startWait is how long start watches the new keybars for an early exit.
+var startWait = time.Second
+
 // backgroundEnv is set for the keybars that start runs, which has no stdin.
 const backgroundEnv = "KEYBARS_BACKGROUND"
 
@@ -103,7 +106,7 @@ func start(args []string) error {
 			return errors.New("exited at start without an error: run keybars in the foreground to see why")
 		}
 		return fmt.Errorf("exited at start:\n%s", strings.TrimSpace(string(out)))
-	case <-time.After(time.Second):
+	case <-time.After(startWait):
 	}
 	fmt.Printf("keybars started (pid %d), log in %s\n", cmd.Process.Pid, logPath)
 	return nil

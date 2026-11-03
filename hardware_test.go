@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -190,6 +191,54 @@ func TestFlagsCheckedFirst(t *testing.T) {
 		if err := fn([]string{"-backend", "razer"}); err == nil || !strings.Contains(err.Error(), "want keymapp or openrgb") {
 			t.Errorf("%s -backend razer: err = %v", name, err)
 		}
+	}
+}
+
+func TestRunWarnsOfDuplicateLED(t *testing.T) {
+	sock, k := fakeKeymapp(t, "Planck EZ", 100)
+	m := filepath.Join(t.TempDir(), "dupe.txt")
+	if err := os.WriteFile(m, []byte("1 2\n3 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+	err = withStdin(t, "2;2\n", func() error {
+		return run([]string{"-socket", sock, "-stdin", "-map", m, "-height", "2"})
+	})
+	os.Stderr = old
+	w.Close()
+	warned, _ := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(warned), "LED 1 is in the map twice") {
+		t.Errorf("stderr = %q", warned)
+	}
+	if k.count("SetRGBLed") == 0 {
+		t.Error("the map wasn't used")
+	}
+}
+
+func TestRunVerbose(t *testing.T) {
+	sock, _ := fakeKeymapp(t, "Planck EZ", 100)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+	err = withStdin(t, "3;4;2;1;0;4;3;2;1;0;1;2\n", func() error {
+		return run([]string{"-socket", sock, "-stdin", "-v"})
+	})
+	os.Stderr = old
+	w.Close()
+	said, _ := io.ReadAll(r)
+	if err != nil || !strings.Contains(string(said), "frames in") {
+		t.Errorf("err %v, stderr %q", err, said)
 	}
 }
 

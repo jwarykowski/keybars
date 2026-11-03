@@ -19,6 +19,9 @@ jobs:
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.14.0
-      - run: go test -race ./...
+      - run: go test -race -coverpkg=./... -coverprofile=/tmp/cover.out ./...
+      # tests in one package count for the others they drive
+      - name: coverage stays at 94.5% or more
+        run: go tool cover -func=/tmp/cover.out | awk '/^total:/ { sub("%", "", $3); print "coverage " $3 "%"; if ($3 < 94.5) exit 1 }'
       - name: third-party notices are current
         run: scripts/notices.sh && git diff --exit-code THIRD_PARTY_NOTICES.md

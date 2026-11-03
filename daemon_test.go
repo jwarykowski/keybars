@@ -3,11 +3,13 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunning(t *testing.T) {
@@ -117,6 +119,36 @@ func TestStartRefusesStdin(t *testing.T) {
 	}
 }
 
+func TestStartQuietExit(t *testing.T) {
+	sock, _ := fakeKeymapp(t, "Planck EZ", 100)
+	background(t)
+	// a cava that ends at once, so keybars exits without an error
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "cava"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// a race build can take over a second to get going
+	old := startWait
+	startWait = 10 * time.Second
+	t.Cleanup(func() { startWait = old })
+	_, err := stdout(t, func() error { return start([]string{"-socket", sock}) })
+	if err == nil || !strings.Contains(err.Error(), "without an error") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestStartLockFails(t *testing.T) {
+	background(t)
+	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "keybars")
+	if err := os.MkdirAll(filepath.Join(dir, "keybars.lock"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := start(nil); err == nil || !strings.Contains(err.Error(), "keybars.lock") {
+		t.Errorf("err = %v", err)
+	}
+}
+
 func TestStartReportsEarlyExit(t *testing.T) {
 	background(t)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -126,5 +158,62 @@ func TestStartReportsEarlyExit(t *testing.T) {
 	}
 	if _, ok := running(os.Getenv("XDG_STATE_HOME") + "/keybars"); ok {
 		t.Error("left a pid file")
+	}
+}
+
+func TestHomeFallbacks(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	if dir, err := stateDir(); err != nil || dir != filepath.Join(home, ".local", "state", "keybars") {
+		t.Errorf("stateDir = %q, %v", dir, err)
+	}
+	if p, err := configPath(); err != nil || p != filepath.Join(home, ".config", "keybars", "config") {
+		t.Errorf("configPath = %q, %v", p, err)
+	}
+}
+
+func TestNoHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	for name, fn := range map[string]func() error{
+		"start":  func() error { return start(nil) },
+		"stop":   stop,
+		"status": status,
+	} {
+		if err := fn(); err == nil {
+			t.Errorf("%s without a home: no error", name)
+		}
+	}
+	// without a home there's no default settings file, which is fine
+	if err := loadConfig(flag.NewFlagSet("t", flag.ContinueOnError), nil); err != nil {
+		t.Errorf("loadConfig: %v", err)
+	}
+}
+
+func TestOurs(t *testing.T) {
+	if ours(999999999) {
+		t.Error("a pid that's gone is ours")
+	}
+	if !ours(os.Getpid()) {
+		t.Error("this program isn't ours")
+	}
+	t.Setenv("PATH", "")
+	if !ours(999999999) {
+		t.Error("without ps, the pid file isn't trusted")
+	}
+}
+
+func TestStartStateDirUnwritable(t *testing.T) {
+	background(t)
+	// a file where the state directory should be
+	file := filepath.Join(os.Getenv("XDG_STATE_HOME"), "keybars")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := start(nil); err == nil {
+		t.Error("no error")
 	}
 }

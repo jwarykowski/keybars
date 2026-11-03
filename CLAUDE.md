@@ -10,6 +10,8 @@ working here.
 
 - `go vet ./...`, `go test -race ./...` (CI races too), with
   `GOTOOLCHAIN=auto`.
+- CI fails if total coverage (`-coverpkg=./...`, so a package's tests count
+  for the others they drive) drops below 94.5%; new code comes with tests.
 - Tests must not need a keyboard: the commands' tests drive a fake Keymapp
   socket (`hardware_test.go`) and a fake OpenRGB server (`openrgb_test.go`).
   `start`'s tests run the test binary itself as keybars (`TestMain`), with

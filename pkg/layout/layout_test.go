@@ -131,3 +131,9 @@ func TestFromCells(t *testing.T) {
 		t.Error("no rows: no error")
 	}
 }
+
+func TestParseLineTooLong(t *testing.T) {
+	if _, err := Parse("t", strings.NewReader(strings.Repeat("1 ", 40000))); err == nil {
+		t.Error("a 80 KB line: no error")
+	}
+}
