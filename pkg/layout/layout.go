@@ -35,7 +35,11 @@ func Parse(name string, r io.Reader) (Map, error) {
 	cols := 0
 	sc := bufio.NewScanner(r)
 	for n := 1; sc.Scan(); n++ {
-		line, _, _ := strings.Cut(sc.Text(), "#")
+		text := sc.Text()
+		if n == 1 {
+			text = strings.TrimPrefix(text, "\ufeff") // some editors start the file with a BOM
+		}
+		line, _, _ := strings.Cut(text, "#")
 		var row []int
 		for f := range strings.FieldsSeq(line) {
 			switch f {
@@ -106,6 +110,18 @@ func (m Map) LEDs() []int {
 		}
 	}
 	return out
+}
+
+// Duplicate returns an LED that is in the map more than once.
+func (m Map) Duplicate() (int, bool) {
+	seen := map[int]bool{}
+	for _, led := range m.LEDs() {
+		if seen[led] {
+			return led, true
+		}
+		seen[led] = true
+	}
+	return 0, false
 }
 
 // Builtin lists the maps in fsys (files named <model>.txt).

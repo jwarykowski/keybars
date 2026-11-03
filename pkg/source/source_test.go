@@ -25,7 +25,7 @@ func TestParse(t *testing.T) {
 		{"surrounding space", "  4;5;  ", []int{4, 5}, false},
 		{"negative passes through", "-1;2;", []int{-1, 2}, false},
 		{"not a number", "3;x;", nil, true},
-		{"inner space", "3; 4;", nil, true},
+		{"inner space", "3; 4;", []int{3, 4}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -50,6 +50,7 @@ func TestRead(t *testing.T) {
 		{"frames", "1;2;\n3;4;\n", [][]int{{1, 2}, {3, 4}}, false},
 		{"nothing", "", nil, false},
 		{"stops at a bad frame", "1;2;\nx;\n3;4;\n", [][]int{{1, 2}}, true},
+		{"a line too long", strings.Repeat("1;", 40000), nil, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -37,6 +37,13 @@ idle = "3s"
 	}
 }
 
+func TestApplyConfigBOM(t *testing.T) {
+	fl, _, gain, _, _ := testFlags()
+	if err := applyConfig(fl, "config", strings.NewReader("\ufeffgain = 2\n")); err != nil || *gain != 2 {
+		t.Errorf("gain %v, %v", *gain, err)
+	}
+}
+
 func TestApplyConfigSkipsPro(t *testing.T) {
 	fl, _, gain, _, _ := testFlags()
 	cfg := "low-hz = 40\nhigh-hz = 16000\nbrightness = 80\nsymmetry = centre\ngain = 3\n"

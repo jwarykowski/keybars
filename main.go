@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -95,6 +96,22 @@ func main() {
 	}
 }
 
+// commands are main's subcommands, for noArgs to spot one after the flags.
+var commands = []string{"run", "test", "find", "gen", "maps", "start", "stop", "status", "version", "licences", "licenses", "help"}
+
+// noArgs rejects words left after fl's flags: a command after a flag
+// (keybars -v test) would otherwise be dropped and the bars run.
+func noArgs(fl *flag.FlagSet) error {
+	if fl.NArg() == 0 {
+		return nil
+	}
+	a := fl.Arg(0)
+	if slices.Contains(commands, a) {
+		return fmt.Errorf("%q after the flags: put the command first (keybars %s [flags])", a, a)
+	}
+	return fmt.Errorf("unexpected argument %q", a)
+}
+
 // keyboard is a backend: Keymapp, or a device through OpenRGB.
 type keyboard interface {
 	rgb.LEDs
@@ -116,6 +133,14 @@ func connFlags(fl *flag.FlagSet) conn {
 		addr:    fl.String("openrgb", openrgb.DefaultAddr, "OpenRGB SDK server address"),
 		device:  fl.String("device", "", "OpenRGB device: part of its name (default: the first keyboard)"),
 	}
+}
+
+// check rejects an unknown backend before connecting.
+func (c conn) check() error {
+	if *c.backend != "keymapp" && *c.backend != "openrgb" {
+		return fmt.Errorf("-backend %q: want keymapp or openrgb", *c.backend)
+	}
+	return nil
 }
 
 func (c conn) connect() (keyboard, error) {
@@ -158,17 +183,45 @@ func commonFlags(fl *flag.FlagSet) common {
 	}
 }
 
+// check rejects a backend, model or map file that can't work before
+// connecting, so a bad flag isn't hidden behind a missing keyboard.
+func (c common) check() error {
+	if err := c.conn.check(); err != nil {
+		return err
+	}
+	if *c.model != "" && !slices.Contains(layout.Builtin(maps), *c.model) {
+		return fmt.Errorf("-model %q: want one of %s, or -map FILE", *c.model, strings.Join(layout.Builtin(maps), ", "))
+	}
+	if *c.mapFile != "" {
+		if _, err := readMap(*c.mapFile); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func readMap(path string) (layout.Map, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return layout.Map{}, err
+	}
+	defer f.Close()
+	return layout.Parse(path, f)
+}
+
 // loadMap reads -map, else the -model map, else the map for the connected
 // keyboard: the built-in one matching Keymapp's name for it, or an OpenRGB
 // device's own key matrix.
 func loadMap(c common, kb keyboard) (layout.Map, error) {
 	if *c.mapFile != "" {
-		f, err := os.Open(*c.mapFile)
-		if err != nil {
-			return layout.Map{}, err
+		m, err := readMap(*c.mapFile)
+		if err == nil {
+			// OpenRGB's matrices can give a wide key's LED twice, so it's only a warning
+			if led, ok := m.Duplicate(); ok {
+				fmt.Fprintf(os.Stderr, "keybars: %s: LED %d is in the map twice, so its key shows two bars\n", *c.mapFile, led)
+			}
 		}
-		defer f.Close()
-		return layout.Parse(*c.mapFile, f)
+		return m, err
 	}
 	if d, ok := kb.(*openrgb.Device); ok {
 		if *c.model != "" {
@@ -239,12 +292,28 @@ func run(args []string) error {
 		return err
 	}
 
+	if err := noArgs(fl); err != nil {
+		return err
+	}
+	if *stdin && os.Getenv(backgroundEnv) != "" {
+		return errors.New("-stdin can't run in the background: start has no input to give it")
+	}
 	if err := checkRun(*fps, *smooth, *gain); err != nil {
+		return err
+	}
+	if err := checkTimes(*height, *idle, *refresh, *peakHold, *peakFall); err != nil {
 		return err
 	}
 	cs, err := bars.ParseColours(*colours)
 	if err != nil {
 		return err
+	}
+	pc, err := bars.ParseColours(*peakColour)
+	if err != nil {
+		return fmt.Errorf("-peak-colour: %w", err)
+	}
+	if len(pc) != 1 {
+		return fmt.Errorf("-peak-colour %q: want one colour", *peakColour)
 	}
 	var reserved []int
 	for s := range strings.SplitSeq(*reserve, ",") {
@@ -252,10 +321,13 @@ func run(args []string) error {
 			continue
 		}
 		n, err := strconv.Atoi(s)
-		if err != nil {
-			return fmt.Errorf("-reserve: %w", err)
+		if err != nil || n < 0 {
+			return fmt.Errorf("-reserve %q: want LED indices, e.g. 36,61", *reserve)
 		}
 		reserved = append(reserved, n)
+	}
+	if err := c.check(); err != nil {
+		return err
 	}
 
 	client, err := c.connect()
@@ -274,10 +346,6 @@ func run(args []string) error {
 	r := bars.New(grid, client, cs, reserved)
 	var pk *bars.Peaks
 	if *peaks {
-		pc, err := bars.ParseColours(*peakColour)
-		if err != nil {
-			return fmt.Errorf("-peak-colour: %w", err)
-		}
 		r.WithPeaks(pc[0])
 		pk = bars.NewPeaks(*peakHold, *peakFall)
 	}
@@ -344,8 +412,26 @@ func checkRun(fps, smooth int, gain float64) error {
 		return fmt.Errorf("-fps %d: want 1 or more", fps)
 	case smooth < 0 || smooth > 100:
 		return fmt.Errorf("-smooth %d: want 0-100", smooth)
-	case gain <= 0:
+	case !(gain > 0) || math.IsInf(gain, 0):
 		return fmt.Errorf("-gain %g: want more than 0", gain)
+	}
+	return nil
+}
+
+// checkTimes rejects a height or timing the bars can't use. -refresh 0
+// never resends.
+func checkTimes(height int, idle, refresh, peakHold time.Duration, peakFall float64) error {
+	switch {
+	case height < 0:
+		return fmt.Errorf("-height %d: want 0 or more", height)
+	case idle < 0:
+		return fmt.Errorf("-idle %s: want 0 or more", idle)
+	case refresh < 0:
+		return fmt.Errorf("-refresh %s: want 0 (never) or more", refresh)
+	case peakHold < 0:
+		return fmt.Errorf("-peak-hold %s: want 0 or more", peakHold)
+	case !(peakFall > 0) || math.IsInf(peakFall, 0):
+		return fmt.Errorf("-peak-fall %g: want more than 0", peakFall)
 	}
 	return nil
 }
@@ -461,6 +547,12 @@ func test(args []string) error {
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
+	if err := noArgs(fl); err != nil {
+		return err
+	}
+	if err := c.check(); err != nil {
+		return err
+	}
 	client, err := c.connect()
 	if err != nil {
 		return err
@@ -520,6 +612,12 @@ func find(args []string) error {
 	to := fl.Int("to", -1, "last key index (default: until the keyboard has no more)")
 	auto := fl.Duration("auto", 0, "step on a timer instead of waiting for Enter")
 	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	if err := noArgs(fl); err != nil {
+		return err
+	}
+	if err := cf.check(); err != nil {
 		return err
 	}
 	client, err := cf.connect()
@@ -607,6 +705,12 @@ func listMaps(args []string) error {
 	cf := connFlags(fl)
 	save := fl.String("save", "", "with -backend openrgb, also save each device's description in this directory, to attach to a report")
 	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	if err := noArgs(fl); err != nil {
+		return err
+	}
+	if err := cf.check(); err != nil {
 		return err
 	}
 	if *cf.backend == "openrgb" {
@@ -774,13 +878,19 @@ func gen(args []string) error {
 // qmkClient fetches keyboard definitions; the timeout keeps gen from hanging.
 var qmkClient = &http.Client{Timeout: 15 * time.Second}
 
+// localPath reports whether src names a file rather than a keyboard in
+// qmk_firmware, so a mistyped path isn't sent to QMK and GitHub.
+func localPath(src string) bool {
+	return filepath.IsAbs(src) || strings.HasPrefix(src, ".") || strings.HasPrefix(src, "~") || strings.HasSuffix(src, ".json")
+}
+
 func readQMK(src string) (qmk.Keyboard, error) {
 	f, err := os.Open(src)
 	if err == nil {
 		defer f.Close()
 		return qmk.Parse(f)
 	}
-	if !errors.Is(err, fs.ErrNotExist) {
+	if !errors.Is(err, fs.ErrNotExist) || localPath(src) {
 		return qmk.Keyboard{}, err
 	}
 	var errs []error

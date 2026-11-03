@@ -83,6 +83,40 @@ func TestStartStop(t *testing.T) {
 	}
 }
 
+func TestStartOnce(t *testing.T) {
+	sock, _ := fakeKeymapp(t, "Planck EZ", 100)
+	background(t)
+	t.Cleanup(func() { _, _ = stdout(t, stop) })
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() { errs <- start([]string{"-socket", sock}) }()
+	}
+	var started int
+	for range 2 {
+		if err := <-errs; err == nil {
+			started++
+		} else if !strings.Contains(err.Error(), "already running") {
+			t.Errorf("err = %v", err)
+		}
+	}
+	if started != 1 {
+		t.Errorf("%d starts launched keybars, want 1", started)
+	}
+}
+
+func TestStartRefusesStdin(t *testing.T) {
+	sock, _ := fakeKeymapp(t, "Planck EZ", 100)
+	background(t)
+	cfg := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(cfg, []byte("stdin = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := stdout(t, func() error { return start([]string{"-socket", sock, "-config", cfg}) })
+	if err == nil || !strings.Contains(err.Error(), "-stdin can't run in the background") {
+		t.Errorf("err = %v", err)
+	}
+}
+
 func TestStartReportsEarlyExit(t *testing.T) {
 	background(t)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

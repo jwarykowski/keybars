@@ -3,6 +3,7 @@ package keymapp
 import (
 	"bytes"
 	"net"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -160,6 +161,17 @@ func TestKeyboard(t *testing.T) {
 func TestDialMissingSocket(t *testing.T) {
 	_, err := Dial(filepath.Join(t.TempDir(), "none.sock"))
 	if err == nil || !strings.Contains(err.Error(), "is Keymapp running") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestDialNotASocket(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "k.sock")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Dial(file)
+	if err == nil || !strings.Contains(err.Error(), "not a socket") {
 		t.Errorf("err = %v", err)
 	}
 }

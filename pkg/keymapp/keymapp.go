@@ -58,8 +58,12 @@ func SocketPath() (string, error) {
 
 // Dial connects to the socket at path.
 func Dial(path string) (*Client, error) {
-	if _, err := os.Stat(path); err != nil {
+	fi, err := os.Stat(path)
+	if err != nil {
 		return nil, fmt.Errorf("keymapp socket %s: %w (is Keymapp running with its API on?)", path, err)
+	}
+	if fi.Mode().IsRegular() || fi.IsDir() {
+		return nil, fmt.Errorf("keymapp socket %s: not a socket (is Keymapp running with its API on?)", path)
 	}
 	conn, err := grpc.NewClient("unix://"+path,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
