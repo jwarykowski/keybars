@@ -49,3 +49,17 @@ func sameProgram(comm, exe string) bool {
 }
 
 func terminate(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) }
+
+// lock takes dir's lock file, waiting for another start to finish; unlock
+// lets it go. The file isn't passed to the background keybars.
+func lock(dir string) (unlock func(), err error) {
+	f, err := os.OpenFile(filepath.Join(dir, "keybars.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return func() { f.Close() }, nil
+}

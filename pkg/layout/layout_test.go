@@ -37,6 +37,24 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestParseBOM(t *testing.T) {
+	m, err := Parse("t", strings.NewReader("\ufeff1 2\n3 4\n"))
+	if err != nil || !slices.Equal(m.LEDs(), []int{1, 2, 3, 4}) {
+		t.Errorf("LEDs = %v, %v", m.LEDs(), err)
+	}
+}
+
+func TestDuplicate(t *testing.T) {
+	m, _ := Parse("t", strings.NewReader("1 2\n3 1\n"))
+	if led, ok := m.Duplicate(); !ok || led != 1 {
+		t.Errorf("Duplicate = %d, %v; want 1", led, ok)
+	}
+	m, _ = Parse("t", strings.NewReader("1 2\n3 -\n"))
+	if led, ok := m.Duplicate(); ok {
+		t.Errorf("Duplicate = %d on a map without one", led)
+	}
+}
+
 func TestParseErrors(t *testing.T) {
 	for _, in := range []string{"", "# only a comment\n", "1 x 3\n", "1 -2\n"} {
 		if _, err := Parse("t", strings.NewReader(in)); err == nil {

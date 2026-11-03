@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,6 +13,9 @@ import (
 	"strings"
 	"time"
 )
+
+// backgroundEnv is set for the keybars that start runs, which has no stdin.
+const backgroundEnv = "KEYBARS_BACKGROUND"
 
 // stateDir holds the background keybars' pid file and log:
 // $XDG_STATE_HOME/keybars, else ~/.local/state/keybars.
@@ -54,11 +58,17 @@ func start(args []string) error {
 	if err != nil {
 		return err
 	}
-	if pid, ok := running(dir); ok {
-		return fmt.Errorf("already running (pid %d)", pid)
-	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
+	}
+	// held until the new keybars has a pid file, so two starts can't both launch
+	unlock, err := lock(dir)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if pid, ok := running(dir); ok {
+		return fmt.Errorf("already running (pid %d)", pid)
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -74,6 +84,7 @@ func start(args []string) error {
 	cmd := exec.Command(exe, append([]string{"run"}, args...)...)
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	cmd.SysProcAttr = detached()
+	cmd.Env = append(os.Environ(), backgroundEnv+"=1")
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -88,6 +99,9 @@ func start(args []string) error {
 	case <-exited:
 		os.Remove(pidFile)
 		out, _ := os.ReadFile(logPath)
+		if len(bytes.TrimSpace(out)) == 0 {
+			return errors.New("exited at start without an error: run keybars in the foreground to see why")
+		}
 		return fmt.Errorf("exited at start:\n%s", strings.TrimSpace(string(out)))
 	case <-time.After(time.Second):
 	}

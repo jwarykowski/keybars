@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -33,10 +34,41 @@ func TestCheckRun(t *testing.T) {
 		{"smooth above", 30, 101, 1, "-smooth 101"},
 		{"no gain", 30, 35, 0, "-gain 0"},
 		{"negative gain", 30, 35, -2, "-gain -2"},
+		{"gain not a number", 30, 35, math.NaN(), "-gain NaN"},
+		{"endless gain", 30, 35, math.Inf(1), "-gain +Inf"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := checkRun(tt.fps, tt.smooth, tt.gain)
+			if tt.wantErr == "" && err != nil || tt.wantErr != "" && (err == nil || !strings.HasPrefix(err.Error(), tt.wantErr)) {
+				t.Errorf("err = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestCheckTimes(t *testing.T) {
+	s := time.Second
+	tests := []struct {
+		name                string
+		height              int
+		idle, refresh, hold time.Duration
+		fall                float64
+		wantErr             string
+	}{
+		{"defaults", 0, s, 2 * s, 400 * time.Millisecond, 6, ""},
+		{"no refresh, no hold, no idle", 3, 0, 0, 0, 0.1, ""},
+		{"negative height", -3, s, s, s, 6, "-height -3"},
+		{"negative idle", 0, -s, s, s, 6, "-idle -1s"},
+		{"negative refresh", 0, s, -s, s, 6, "-refresh -1s"},
+		{"negative hold", 0, s, s, -s, 6, "-peak-hold -1s"},
+		{"peaks that never fall", 0, s, s, s, 0, "-peak-fall 0"},
+		{"peaks that rise", 0, s, s, s, -5, "-peak-fall -5"},
+		{"peak fall not a number", 0, s, s, s, math.NaN(), "-peak-fall NaN"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkTimes(tt.height, tt.idle, tt.refresh, tt.hold, tt.fall)
 			if tt.wantErr == "" && err != nil || tt.wantErr != "" && (err == nil || !strings.HasPrefix(err.Error(), tt.wantErr)) {
 				t.Errorf("err = %v, want %q", err, tt.wantErr)
 			}
@@ -240,6 +272,8 @@ func TestReadQMK(t *testing.T) {
 		{"raw files after a network error", "acme/pad", qmkFake{"v1/keyboards/acme/pad/info.json": "", "master/keyboards/acme/pad/info.json": pad}, "pad", ""},
 		{"nowhere", "acme/none", qmkFake{}, "", "acme/none is not a file or a QMK keyboard"},
 		{"a file that can't be read isn't fetched", filepath.Join(unreadable, "x.json"), nil, "", "permission denied"},
+		{"a missing file isn't fetched", filepath.Join(t.TempDir(), "pad.json"), qmkFake{}, "", "no such file"},
+		{"nor a relative path", "../acme/pad", qmkFake{}, "", "no such file"},
 	}
 	old := qmkClient
 	t.Cleanup(func() { qmkClient = old })

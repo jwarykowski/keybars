@@ -154,6 +154,52 @@ func TestRunRefuses(t *testing.T) {
 	}
 }
 
+// TestFlagsCheckedFirst: a bad flag is reported even with Keymapp away,
+// rather than after it's fixed.
+func TestFlagsCheckedFirst(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	none := filepath.Join(t.TempDir(), "none.sock")
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{"command after a flag", []string{"-v", "test"}, `"test" after the flags`},
+		{"stray word", []string{"voyager"}, `unexpected argument "voyager"`},
+		{"bad peak colour without peaks", []string{"-peaks=false", "-peak-colour", "pink"}, "-peak-colour"},
+		{"two peak colours", []string{"-peak-colour", "#ff0000,#00ff00"}, "want one colour"},
+		{"negative reserve", []string{"-reserve", "-1"}, "-reserve"},
+		{"negative height", []string{"-height", "-3"}, "-height -3"},
+		{"rising peaks", []string{"-peak-fall", "-1"}, "-peak-fall"},
+		{"unknown model", []string{"-model", "ergodox"}, `-model "ergodox"`},
+		{"missing map", []string{"-map", filepath.Join(t.TempDir(), "none.txt")}, "no such file"},
+		{"bad backend", []string{"-backend", "razer"}, "want keymapp or openrgb"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := run(append([]string{"-socket", none}, tt.args...))
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("err = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+	for name, fn := range map[string]func([]string) error{"test": test, "find": find, "maps": listMaps} {
+		if err := fn([]string{"-socket", none, "extra"}); err == nil || !strings.Contains(err.Error(), "unexpected argument") {
+			t.Errorf("%s with a stray word: err = %v", name, err)
+		}
+		if err := fn([]string{"-backend", "razer"}); err == nil || !strings.Contains(err.Error(), "want keymapp or openrgb") {
+			t.Errorf("%s -backend razer: err = %v", name, err)
+		}
+	}
+}
+
+func TestStdinNotInBackground(t *testing.T) {
+	t.Setenv(backgroundEnv, "1")
+	if err := run([]string{"-stdin"}); err == nil || !strings.Contains(err.Error(), "-stdin") {
+		t.Errorf("err = %v", err)
+	}
+}
+
 func TestTestSweeps(t *testing.T) {
 	sock, k := fakeKeymapp(t, "Planck EZ", 100)
 	out, err := stdout(t, func() error { return test([]string{"-socket", sock, "-step", "1ms"}) })

@@ -6,6 +6,7 @@ package source
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +19,7 @@ import (
 func Parse(line string) ([]int, error) {
 	var out []int
 	for f := range strings.SplitSeq(strings.TrimSpace(line), ";") {
-		if f == "" {
+		if f = strings.TrimSpace(f); f == "" {
 			continue
 		}
 		n, err := strconv.Atoi(f)
@@ -40,6 +41,9 @@ func Read(r io.Reader, frames chan<- []int) error {
 			return err
 		}
 		frames <- f
+	}
+	if errors.Is(sc.Err(), bufio.ErrTooLong) {
+		return fmt.Errorf("a frame is over %d bytes: want one line per frame", bufio.MaxScanTokenSize)
 	}
 	return sc.Err()
 }

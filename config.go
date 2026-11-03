@@ -78,6 +78,9 @@ func applyConfig(fl *flag.FlagSet, name string, r io.Reader) error {
 	sc := bufio.NewScanner(r)
 	for n := 1; sc.Scan(); n++ {
 		line := strings.TrimSpace(sc.Text())
+		if n == 1 {
+			line = strings.TrimPrefix(line, "\ufeff") // some editors start the file with a BOM
+		}
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
