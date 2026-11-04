@@ -7,21 +7,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  # vet, golangci-lint (also gofumpt and goimports, .golangci.yml) and the
+  # tests; tests in one package count for the others they drive
+  go:
+    uses: jwarykowski/workflows/.github/workflows/go.yml@v1
+    with:
+      test-flags: -race
+      coverage-min: "94.5"
+
+  notices:
     runs-on: ubuntu-latest
+    container:
+      image: localhost/forgejo-job:1
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: go vet ./...
-      # also checks formatting: gofumpt and goimports (.golangci.yml)
-      - uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.14.0
-      - run: go test -race -coverpkg=./... -coverprofile=/tmp/cover.out ./...
-      # tests in one package count for the others they drive
-      - name: coverage stays at 94.5% or more
-        run: go tool cover -func=/tmp/cover.out | awk '/^total:/ { sub("%", "", $3); print "coverage " $3 "%"; if ($3 < 94.5) exit 1 }'
+      - uses: https://code.forgejo.org/actions/checkout@v4
       - name: third-party notices are current
         run: scripts/notices.sh && git diff --exit-code THIRD_PARTY_NOTICES.md
