@@ -269,8 +269,13 @@ map puts it. Check the result with `keybars test` as below.
 
 Otherwise, find the indices by hand:
 
-1. `keybars find` darkens the board and lights one key at a time, printing
-   its index (Keymapp never lights index 0, so start from 1); press Enter for the next. Write each index where its key sits.
+1. `keybars find -o my-board.txt` darkens the board and lights one key at a
+   time (from 1 on Keymapp, which never lights index 0). For each, type the
+   key's row and column, counting from 1 at the top left (`2 5`), and it
+   writes the map as you go; a wide key covers columns (`5 4-7`). Enter
+   passes an LED that isn't a key, `b` goes back one, `g 40` goes to LED 40,
+   `q` or Ctrl-C stops. Keys already passed glow dim green. Stop
+   `keybars start` first: it would draw over the lit key.
 2. `keybars test -map my-board.txt` sweeps a bar across each column, then a
    level across each row: a key out of line is a wrong index.
 3. Use it with `-map my-board.txt`, or open a pull request adding it to

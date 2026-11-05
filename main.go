@@ -5,7 +5,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -557,6 +556,9 @@ func test(args []string) error {
 	if err := c.check(); err != nil {
 		return err
 	}
+	if err := notInBackground(); err != nil {
+		return err
+	}
 	client, err := c.connect()
 	if err != nil {
 		return err
@@ -606,102 +608,6 @@ func test(args []string) error {
 		}
 	}
 	return nil
-}
-
-// find lights LEDs one at a time and prints each index, to draw a map from.
-func find(args []string) error {
-	fl := flag.NewFlagSet("keybars find", flag.ContinueOnError)
-	cf := connFlags(fl)
-	from := fl.Int("from", -1, "first key index (default: 1 on Keymapp, which never lights 0, else 0)")
-	to := fl.Int("to", -1, "last key index (default: until the keyboard has no more)")
-	auto := fl.Duration("auto", 0, "step on a timer instead of waiting for Enter")
-	if err := fl.Parse(args); err != nil {
-		return err
-	}
-	if err := noArgs(fl); err != nil {
-		return err
-	}
-	if err := cf.check(); err != nil {
-		return err
-	}
-	client, err := cf.connect()
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-	if *from < 0 {
-		*from = 0
-		if *cf.backend == "keymapp" {
-			*from = 1
-		}
-	}
-	if kb, err := client.Keyboard(); err == nil {
-		fmt.Printf("%s: every key goes dark, then one lights at a time.\n", kb)
-	}
-	if *auto == 0 {
-		fmt.Println("Note the key under each LED number; Enter for the next, q to stop.")
-	}
-	// set colours one LED and shows it at once, on backends that buffer.
-	set := func(led int, c rgb.Colour) error {
-		if err := client.Set(led, c); err != nil {
-			return err
-		}
-		return rgb.Flush(client)
-	}
-	named, _ := client.(interface{ Name(led int) string })
-	white := rgb.Colour{R: 255, G: 255, B: 255}
-	if err := client.SetAll(rgb.Colour{}); err != nil {
-		return err
-	}
-	defer func() { _ = client.RestoreAll() }() // best effort on the way out
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	in := bufio.NewReader(os.Stdin)
-	for led := *from; *to < 0 || led <= *to; led++ {
-		if err := set(led, white); err != nil {
-			if !pastLast(client, err) {
-				return err
-			}
-			fmt.Printf("no LED %d: done\n", led)
-			return nil
-		}
-		fmt.Printf("LED %d ", led)
-		if named != nil {
-			fmt.Printf("(%s) ", named.Name(led))
-		}
-		if *auto > 0 {
-			fmt.Println()
-			select {
-			case <-time.After(*auto):
-			case <-ctx.Done():
-				return nil
-			}
-		} else {
-			line, err := in.ReadString('\n')
-			if err != nil || strings.TrimSpace(line) == "q" {
-				return nil
-			}
-		}
-		if err := set(led, rgb.Colour{}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// pastLast reports whether err from lighting an LED means the keyboard has
-// no more, rather than that it has gone: Keymapp says only that the call
-// failed, so it asks whether the keyboard is still there.
-func pastLast(kb keyboard, err error) bool {
-	if errors.Is(err, openrgb.ErrNoLED) {
-		return true
-	}
-	if _, ok := kb.(*openrgb.Device); ok {
-		return false
-	}
-	_, kerr := kb.Keyboard()
-	return kerr == nil
 }
 
 func listMaps(args []string) error {

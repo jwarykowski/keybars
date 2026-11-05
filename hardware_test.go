@@ -32,6 +32,7 @@ type keymappd struct {
 	mu    sync.Mutex
 	calls map[string]int
 	lit   []int // each LED SetRGBLed was asked to light, in order
+	flaky int   // an LED whose first SetRGBLed fails, as Keymapp's sometimes do
 }
 
 func fakeKeymapp(t *testing.T, name string, last int) (string, *keymappd) {
@@ -39,7 +40,7 @@ func fakeKeymapp(t *testing.T, name string, last int) (string, *keymappd) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Keymapp's socket is a unix socket")
 	}
-	k := &keymappd{calls: map[string]int{}}
+	k := &keymappd{calls: map[string]int{}, flaky: -1}
 	path := filepath.Join(t.TempDir(), "k.sock")
 	l, err := net.Listen("unix", path)
 	if err != nil {
@@ -70,7 +71,13 @@ func fakeKeymapp(t *testing.T, name string, last int) (string, *keymappd) {
 			if len(req) >= 2 && req[0] == 0x08 {
 				led = int(req[1])
 			}
-			if led > last {
+			k.mu.Lock()
+			flaky := led == k.flaky
+			if flaky {
+				k.flaky = -1
+			}
+			k.mu.Unlock()
+			if led > last || flaky {
 				return stream.SendMsg(new([]byte)) // success false
 			}
 			k.mu.Lock()
@@ -273,7 +280,9 @@ func TestFind(t *testing.T) {
 	}{
 		{"steps on a timer until told to stop", []string{"-auto", "1ms", "-to", "3"}, "", []string{"Planck EZ: every key goes dark", "LED 1", "LED 3"}, []int{1, 1, 2, 2, 3, 3}},
 		{"stops where the keyboard ends", []string{"-auto", "1ms", "-from", "4"}, "", []string{"LED 5", "no LED 6: done"}, []int{4, 4, 5, 5}},
-		{"Enter steps, q stops", nil, "\nq\n", []string{"Enter for the next", "LED 2"}, []int{1, 1, 2}},
+		{"Enter steps, q stops", nil, "\nq\n", []string{"Enter for the next", "LED 2", "built-in map for it (-model planck)"}, []int{1, 1, 2}},
+		{"b goes back, g goes to an LED", nil, "\nb\ng 4\nq\n", []string{"LED 1 > LED 2 > LED 1 > LED 4"}, []int{1, 1, 2, 2, 1, 1, 4}},
+		{"says what it didn't follow", nil, "x\n?\nq\n", []string{`"x"? Enter for the next LED`, "a wide key covers columns"}, []int{1}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
