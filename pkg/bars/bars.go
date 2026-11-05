@@ -110,13 +110,9 @@ func (r *Renderer) Clear() error {
 func ParseColours(s string) ([]rgb.Colour, error) {
 	var out []rgb.Colour
 	for part := range strings.SplitSeq(s, ",") {
-		var c rgb.Colour
-		p := strings.TrimPrefix(strings.TrimSpace(part), "#")
-		if len(p) != 6 {
+		c, err := rgb.Parse("#" + strings.TrimPrefix(strings.TrimSpace(part), "#"))
+		if err != nil {
 			return nil, fmt.Errorf("colour %q: want #rrggbb", part)
-		}
-		if _, err := fmt.Sscanf(p, "%02x%02x%02x", &c.R, &c.G, &c.B); err != nil {
-			return nil, fmt.Errorf("colour %q: %w", part, err)
 		}
 		out = append(out, c)
 	}

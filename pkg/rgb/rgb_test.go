@@ -41,3 +41,25 @@ func TestFlush(t *testing.T) {
 		})
 	}
 }
+
+func TestParse(t *testing.T) {
+	tests := []struct {
+		in   string
+		want Colour
+		ok   bool
+	}{
+		{"#00e676", Colour{0, 0xe6, 0x76}, true},
+		{"#FFB000", Colour{0xff, 0xb0, 0}, true},
+		{"00e676", Colour{}, false},
+		{"#fff", Colour{}, false},
+		{"#gg0000", Colour{}, false},
+		{"#+fffff", Colour{}, false},
+		{"", Colour{}, false},
+	}
+	for _, tt := range tests {
+		got, err := Parse(tt.in)
+		if got != tt.want || (err == nil) != tt.ok {
+			t.Errorf("Parse(%q) = %v, %v", tt.in, got, err)
+		}
+	}
+}

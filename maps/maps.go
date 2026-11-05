@@ -9,7 +9,10 @@ import (
 	"encoding/json"
 	"io/fs"
 	"strings"
+	"sync"
 	"unicode"
+
+	"github.com/jwarykowski/keybars/pkg/qmk"
 )
 
 // FS holds the built-in ZSA maps, one <model>.txt each.
@@ -53,22 +56,34 @@ func Boards() []Board {
 	if err := json.Unmarshal(b, &out); err != nil {
 		panic(err)
 	}
+	for i := range out {
+		out[i].LEDs = out[i].Shape().LEDs
+	}
+	return out
+}
+
+// Shape is the board as drawn, each key placed in its map from QMK.
+func (b Board) Shape() qmk.Shape {
+	return allShapes()[b.ID]
+}
+
+var allShapes = sync.OnceValue(func() map[string]qmk.Shape {
 	var sh []struct {
-		ID   string `json:"id"`
-		LEDs int    `json:"leds"`
+		ID    string `json:"id"`
+		Order string `json:"order"`
+		qmk.Shape
 	}
 	if err := json.Unmarshal(shapes, &sh); err != nil {
 		panic(err)
 	}
-	for i := range out {
-		for _, s := range sh {
-			if s.ID == out[i].ID {
-				out[i].LEDs = s.LEDs
-			}
+	out := map[string]qmk.Shape{}
+	for _, s := range sh {
+		if s.Order == "firmware" {
+			out[s.ID] = s.Shape
 		}
 	}
 	return out
-}
+})
 
 // MatchQMK finds the map from QMK for a keyboard by the name it reports,
 // ignoring case, spaces and punctuation. Names must match exactly, since a

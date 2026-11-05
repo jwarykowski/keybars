@@ -111,3 +111,29 @@ func TestBarsStandStraight(t *testing.T) {
 		}
 	}
 }
+
+// TestBoardShapes checks each board's shape places every LED its map has.
+func TestBoardShapes(t *testing.T) {
+	for _, b := range Boards() {
+		sh := b.Shape()
+		m, err := layout.Load(QMK, b.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		placed := map[int]bool{}
+		for _, k := range sh.Keys {
+			placed[k.LED] = true
+		}
+		for _, led := range m.LEDs() {
+			if !placed[led] {
+				t.Errorf("%s: LED %d isn't in its shape", b.ID, led)
+			}
+		}
+		if sh.Rows != m.Rows() || sh.Cols != m.Columns() {
+			t.Errorf("%s: shape %dx%d, map %dx%d", b.ID, sh.Rows, sh.Cols, m.Rows(), m.Columns())
+		}
+	}
+	if s := (Board{ID: "voyager"}).Shape(); len(s.Keys) != 0 {
+		t.Error("voyager: Keymapp's numbering, want no firmware shape")
+	}
+}

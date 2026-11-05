@@ -2,6 +2,11 @@
 // way to set them one LED at a time.
 package rgb
 
+import (
+	"fmt"
+	"strconv"
+)
+
 // Colour is an RGB colour.
 type Colour struct{ R, G, B uint8 }
 
@@ -25,4 +30,16 @@ func Flush(l LEDs) error {
 		return f.Flush()
 	}
 	return nil
+}
+
+// Parse reads a #rrggbb colour, in either case.
+func Parse(s string) (Colour, error) {
+	if len(s) != 7 || s[0] != '#' {
+		return Colour{}, fmt.Errorf("colour %q: want #rrggbb", s)
+	}
+	v, err := strconv.ParseUint(s[1:], 16, 32)
+	if err != nil {
+		return Colour{}, fmt.Errorf("colour %q: want #rrggbb", s)
+	}
+	return Colour{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v)}, nil
 }
