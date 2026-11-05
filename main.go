@@ -13,7 +13,6 @@ import (
 	"io"
 	"io/fs"
 	"math"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -726,13 +725,6 @@ func slug(s string) string {
 	return strings.TrimSuffix(b.String(), "-")
 }
 
-// qmkRaw is where gen fetches keyboard definitions named rather than given
-// as a file.
-const (
-	qmkAPI = "https://keyboards.qmk.fm/v1/keyboards/"
-	qmkRaw = "https://raw.githubusercontent.com/qmk/qmk_firmware/master/keyboards/"
-)
-
 // gen writes a map from a QMK keyboard.json: a file, or a keyboard's path in
 // qmk_firmware (zsa/voyager) to fetch.
 func gen(args []string) error {
@@ -757,7 +749,7 @@ func gen(args []string) error {
 		return err
 	}
 	src := fl.Arg(0)
-	kb, err := readQMK(src)
+	kb, err := qmk.Read(src)
 	if err != nil {
 		return err
 	}
@@ -783,47 +775,4 @@ func gen(args []string) error {
 		header = append(header, "Keymapp never lights index 0, so it is a gap.")
 	}
 	return g.Format(os.Stdout, header...)
-}
-
-// qmkClient fetches keyboard definitions; the timeout keeps gen from hanging.
-var qmkClient = &http.Client{Timeout: 15 * time.Second}
-
-// localPath reports whether src names a file rather than a keyboard in
-// qmk_firmware, so a mistyped path isn't sent to QMK and GitHub.
-func localPath(src string) bool {
-	return filepath.IsAbs(src) || strings.HasPrefix(src, ".") || strings.HasPrefix(src, "~") || strings.HasSuffix(src, ".json")
-}
-
-func readQMK(src string) (qmk.Keyboard, error) {
-	f, err := os.Open(src)
-	if err == nil {
-		defer f.Close()
-		return qmk.Parse(f)
-	}
-	if !errors.Is(err, fs.ErrNotExist) || localPath(src) {
-		return qmk.Keyboard{}, err
-	}
-	var errs []error
-	// QMK's API has the merged definition, which variants inherit; the raw
-	// files are a fallback
-	urls := []string{qmkAPI + strings.Trim(src, "/") + "/info.json"}
-	for _, file := range []string{"keyboard.json", "info.json"} {
-		urls = append(urls, qmkRaw+strings.Trim(src, "/")+"/"+file)
-	}
-	for _, url := range urls {
-		resp, err := qmkClient.Get(url)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			errs = append(errs, fmt.Errorf("%s: %s", url, resp.Status))
-			continue
-		}
-		kb, err := qmk.Parse(resp.Body)
-		resp.Body.Close()
-		return kb, err
-	}
-	return qmk.Keyboard{}, fmt.Errorf("%s is not a file or a QMK keyboard: %w", src, errors.Join(errs...))
 }
