@@ -136,7 +136,7 @@ type Grid struct {
 
 // Map draws the keyboard as a grid of key indices.
 func (kb Keyboard) Map(o Options) (Grid, error) {
-	g, _, err := kb.build(o)
+	g, _, _, err := kb.build(o)
 	return g, err
 }
 
@@ -144,10 +144,10 @@ func (kb Keyboard) Map(o Options) (Grid, error) {
 type at struct{ row, col int }
 
 // build is the grid, and where each key (by matrix position) went in it.
-func (kb Keyboard) build(o Options) (Grid, map[[2]int]at, error) {
+func (kb Keyboard) build(o Options) (Grid, map[[2]int]at, map[[2]int]int, error) {
 	keys, err := kb.layout(o.Layout)
 	if err != nil {
-		return Grid{}, nil, err
+		return Grid{}, nil, nil, err
 	}
 	halves := split(keys)
 	if len(halves) == 1 && kb.Split.Enabled {
@@ -172,7 +172,7 @@ func (kb Keyboard) build(o Options) (Grid, map[[2]int]at, error) {
 			}
 		}
 		if len(index) == 0 {
-			return Grid{}, nil, fmt.Errorf("%s has no rgb_matrix layout", kb.Name)
+			return Grid{}, nil, nil, fmt.Errorf("%s has no rgb_matrix layout", kb.Name)
 		}
 	}
 
@@ -213,7 +213,20 @@ func (kb Keyboard) build(o Options) (Grid, map[[2]int]at, error) {
 			}
 		}
 	}
-	return g, where, nil
+	if o.Order == Keymapp {
+		delete(index, keyAt(index, 0))
+	}
+	return g, where, index, nil
+}
+
+// keyAt is the matrix position index gives led, if any.
+func keyAt(index map[[2]int]int, led int) [2]int {
+	for m, l := range index {
+		if l == led {
+			return m
+		}
+	}
+	return [2]int{-1, -1}
 }
 
 // rowStaggered reports whether keys line up in rows rather than columns: a
@@ -295,7 +308,8 @@ type Shape struct {
 }
 
 // ShapeKey is one key: Row and Col in the map, -1 when the map leaves it
-// out (a thumb cluster, say), and the LED the map gives it, -1 for none.
+// out (a thumb cluster, say), and its LED in the map's numbering, -1 for
+// none.
 type ShapeKey struct {
 	X   float64 `json:"x"`
 	Y   float64 `json:"y"`
@@ -308,7 +322,7 @@ type ShapeKey struct {
 
 // Shape is every key of the keyboard's layout, placed in its map.
 func (kb Keyboard) Shape(o Options) (Shape, error) {
-	g, where, err := kb.build(o)
+	g, where, index, err := kb.build(o)
 	if err != nil {
 		return Shape{}, err
 	}
@@ -322,6 +336,8 @@ func (kb Keyboard) Shape(o Options) (Shape, error) {
 		sk := ShapeKey{X: k.X, Y: k.Y, W: w, H: h, Row: -1, Col: -1, LED: -1}
 		if p, ok := where[k.Matrix]; ok {
 			sk.Row, sk.Col, sk.LED = p.row, p.col, g.Cells[p.row][p.col]
+		} else if led, ok := index[k.Matrix]; ok {
+			sk.LED = led
 		}
 		sh.Keys = append(sh.Keys, sk)
 		sh.Width = max(sh.Width, k.X+w)

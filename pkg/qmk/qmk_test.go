@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -179,5 +180,35 @@ func TestShape(t *testing.T) {
 	}
 	if sh.Width != 16.25 {
 		t.Errorf("width %v", sh.Width)
+	}
+}
+
+// The keys a split board's map leaves out keep their LEDs, in the map's
+// numbering, so they can be lit by name.
+func TestShapeOffTheMap(t *testing.T) {
+	for _, tc := range []struct {
+		board string
+		order Order
+		off   []int
+	}{
+		// rows of 7, 7, 7, 6, 5 then 4 thumb keys a half: the inner column
+		// and the thumbs
+		{"moonlander", Keymapp, []int{6, 13, 20, 32, 33, 34, 35, 36, 43, 50, 68, 69, 70, 71}},
+		{"voyager", Keymapp, []int{24, 25, 50, 51}},
+	} {
+		sh, err := load(t, tc.board).Shape(Options{Order: tc.order})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var off []int
+		for _, k := range sh.Keys {
+			if k.Row < 0 {
+				off = append(off, k.LED)
+			}
+		}
+		slices.Sort(off)
+		if !slices.Equal(off, tc.off) {
+			t.Errorf("%s: LEDs off the map %v, want %v", tc.board, off, tc.off)
+		}
 	}
 }
